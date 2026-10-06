@@ -414,6 +414,18 @@ says who can move it. Details sit where the link points.
 - **Ventsi Group** is suspended and disconnected and still holds a per-tenant Channex credential, which
   overrides the platform key (root `CLAUDE.md` §4). Decide before reinstating them.
 - ~~**`docs.reviosoft.app`** has no HSTS or frame protection~~ ✅ **2026-10-06** — `design/docs-preview/Caddyfile`: HSTS, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, a CSP narrowed to what it loads; its internal README was public at /README.md and is now kept out of the upload. Deploy command in that folder's README.
+- ~~**Extending a stay from the RevioPMS calendar**~~ ✅ **2026-10-06** — drag a bar's right end, or
+  *Extend stay* in the stay dialog <!-- status: built apps/pms/lib/actions-extend.ts#extendStay -->. The
+  dialog prices the extra nights at the stay's own rate plan, today's price, shows the tourist tax and
+  other fees they add, and lets reception change the total before anything is written. A direct or
+  phone booking is extended in place (line, night rates, room, and two new lines on an open folio); a
+  **channel** booking is left as the channel sent it and the nights become a **linked reservation** in
+  the same room, payable at the hotel (`bookingGroupId`) — likewise a line of several rooms. Inventory
+  is taken with `claimHold`, the room under the same unit lock every assignment takes, and the change is
+  pushed to the channels. Extending only; shortening is a refund question. Rules in
+  `apps/pms/lib/extend-stay.ts` (13 tests). Checked in the browser, desk and phone: direct with folio
+  (2 nights, typed price, tourist tax for the new nights only), channel booking → linked reservation,
+  a plan with no rate (reception must type one).
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,

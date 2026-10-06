@@ -144,7 +144,7 @@ booked-vs-accommodated model. **Still open:**
       It had been a bare constant in the PMS and a `<` in a database loop, one file away from the
       tie-break bound it must exceed — with only a comment asserting the relationship. A test now
       pins it, and fails whether someone lowers the threshold or raises the tie-break.
-- [ ] Drag-edge-to-extend is explicitly a fast-follow, NOT this round.
+- [x] Drag-edge-to-extend — shipped as the fast-follow on 2026-10-06 (`apps/pms/lib/actions-extend.ts`; see `docs/STATUS.md`).
 
 ---
 

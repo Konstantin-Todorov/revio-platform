@@ -40,6 +40,35 @@ export interface CalendarGridStrings {
   differentType: string;
   dragHintTail: string;
   stay: CalendarStayStrings;
+  extend: CalendarExtendStrings;
+}
+
+/** Extending a stay — the drag handle on a bar's end, and the dialog that prices it. */
+export interface CalendarExtendStrings {
+  handle: string;
+  title: string;
+  desc: string;
+  nights: string;
+  fewer: string;
+  more: string;
+  newCheckOut: string;
+  nightOne: string;
+  nightMany: string;
+  perNight: string;
+  noRate: string;
+  ratePlan: string;
+  total: string;
+  totalHint: string;
+  totalNeeded: string;
+  fees: string;
+  linkedTitle: string;
+  linkedBody: string;
+  confirm: string;
+  cancel: string;
+  loading: string;
+  extendedTo: string;
+  linkedCreated: string;
+  refusals: Record<"not_found" | "not_movable" | "room_taken" | "sold_out" | "no_price" | "too_long" | "changed", string>;
 }
 
 export interface CalendarStayStrings {
@@ -61,6 +90,7 @@ export interface CalendarStayStrings {
   folioBalance: string;
   pinned: string;
   overstayed: string;
+  extend: string;
 }
 
 export interface CalendarStrings {
@@ -93,7 +123,7 @@ export const calendar: Translations<CalendarStrings> = {
     rooms: "Rooms",
     noRoomsAfter: "and every booking will appear here.",
     footnote: (span, from, today) =>
-      `Showing ${span} nights from ${from}. Drag a stay onto another room to move it. Rates are not shown here — they live in RevioCRS; this grid is about rooms and people. Today is ${today}.`,
+      `Showing ${span} nights from ${from}. Drag a stay onto another room to move it, or drag its right end to extend it. Rates are not shown here — they live in RevioCRS; this grid is about rooms and people. Today is ${today}.`,
     grid: {
       bars: {
         arrival: "Arriving today",
@@ -151,6 +181,41 @@ export const calendar: Translations<CalendarStrings> = {
         folioBalance: "Folio balance",
         pinned: "A person chose this room, so it will not be re-assigned automatically.",
         overstayed: "Past its departure date and still in house. This distorts occupancy until it is resolved.",
+        extend: "Extend stay",
+      },
+      extend: {
+        handle: "Drag to extend the stay",
+        title: "Extend {name}'s stay",
+        desc: "Room {room} · now leaving {date}",
+        nights: "Extra nights",
+        fewer: "One night fewer",
+        more: "One night more",
+        newCheckOut: "New departure",
+        nightOne: "{n} night",
+        nightMany: "{n} nights",
+        perNight: "Price per night",
+        noRate: "no rate",
+        ratePlan: "Rate plan: {plan}, today's price",
+        total: "Price for the extra nights",
+        totalHint: "You can change it — what you enter is what goes on the bill.",
+        totalNeeded: "A night has no rate on this plan. Enter the price for the extra nights.",
+        fees: "Added on top",
+        linkedTitle: "This booking came from a channel",
+        linkedBody: "The channel's booking stays as it is. The extra nights become a separate reservation in the same room, linked to it and paid at the hotel.",
+        confirm: "Extend to {date}",
+        cancel: "Cancel",
+        loading: "Checking the room and the price…",
+        extendedTo: "Stay extended to {date}",
+        linkedCreated: "Extra nights booked as a linked reservation, to {date}",
+        refusals: {
+          not_found: "This stay is no longer on the calendar. Refresh and try again.",
+          not_movable: "This guest has already left — a departed stay cannot be extended.",
+          room_taken: "The room is taken on those nights. Move the next guest or choose fewer nights.",
+          sold_out: "This room type is sold out on those nights.",
+          no_price: "Enter the price for the extra nights.",
+          too_long: "Up to 30 extra nights at a time.",
+          changed: "The stay changed while this was open. Close and try again.",
+        },
       },
     },
   },
@@ -167,7 +232,7 @@ export const calendar: Translations<CalendarStrings> = {
     rooms: "Стаи",
     noRoomsAfter: "и всяка резервация ще се появи тук.",
     footnote: (span, from, today) =>
-      `Показани са ${span} нощувки от ${from}. Плъзнете престой върху друга стая, за да го преместите. Цените не се показват тук — те са в RevioCRS; тази таблица е за стаите и хората. Днес е ${today}.`,
+      `Показани са ${span} нощувки от ${from}. Плъзнете престой върху друга стая, за да го преместите, или десния му край, за да го удължите. Цените не се показват тук — те са в RevioCRS; тази таблица е за стаите и хората. Днес е ${today}.`,
     grid: {
       bars: {
         arrival: "Пристига днес",
@@ -225,6 +290,41 @@ export const calendar: Translations<CalendarStrings> = {
         folioBalance: "Салдо по сметката",
         pinned: "Тази стая е избрана от човек, затова няма да бъде преразпределена автоматично.",
         overstayed: "Датата на напускане е минала, а гостът е още в хотела. Това изкривява заетостта, докато не бъде уредено.",
+        extend: "Удължи престоя",
+      },
+      extend: {
+        handle: "Плъзнете, за да удължите престоя",
+        title: "Удължаване на престоя — {name}",
+        desc: "Стая {room} · сега напуска на {date}",
+        nights: "Допълнителни нощувки",
+        fewer: "С една нощувка по-малко",
+        more: "С една нощувка повече",
+        newCheckOut: "Ново напускане",
+        nightOne: "{n} нощувка",
+        nightMany: "{n} нощувки",
+        perNight: "Цена на нощувка",
+        noRate: "няма цена",
+        ratePlan: "Ценови план: {plan}, днешна цена",
+        total: "Сума за допълнителните нощувки",
+        totalHint: "Можете да я промените — каквото въведете, това влиза в сметката.",
+        totalNeeded: "За някоя нощ няма цена по този план. Въведете цената за допълнителните нощувки.",
+        fees: "Добавя се отгоре",
+        linkedTitle: "Тази резервация е от канал",
+        linkedBody: "Резервацията от канала остава непроменена. Допълнителните нощувки стават отделна резервация в същата стая, свързана с нея и платима в хотела.",
+        confirm: "Удължи до {date}",
+        cancel: "Отказ",
+        loading: "Проверяваме стаята и цената…",
+        extendedTo: "Престоят е удължен до {date}",
+        linkedCreated: "Допълнителните нощувки са записани като свързана резервация, до {date}",
+        refusals: {
+          not_found: "Този престой вече не е в календара. Опреснете и опитайте отново.",
+          not_movable: "Гостът вече е напуснал — приключил престой не може да се удължи.",
+          room_taken: "Стаята е заета в тези нощи. Преместете следващия гост или изберете по-малко нощувки.",
+          sold_out: "Този тип стая е разпродаден за тези нощи.",
+          no_price: "Въведете цената за допълнителните нощувки.",
+          too_long: "До 30 допълнителни нощувки наведнъж.",
+          changed: "Престоят се промени, докато прозорецът беше отворен. Затворете и опитайте отново.",
+        },
       },
     },
   },

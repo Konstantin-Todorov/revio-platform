@@ -2,7 +2,7 @@
 
 import { useRef } from "react";
 import Link from "next/link";
-import { LogIn, LogOut, Receipt, PlusCircle, ArrowUpRight, Pin, AlertTriangle } from "lucide-react";
+import { LogIn, LogOut, Receipt, PlusCircle, ArrowUpRight, Pin, AlertTriangle, CalendarPlus } from "lucide-react";
 import { Dialog } from "@revio/ui/dialog";
 import { fill } from "@revio/ui/i18n";
 import type { TapeBar } from "@/lib/tape-chart";
@@ -35,12 +35,14 @@ export interface StayModalProps {
   bar: TapeBar | null;
   open: boolean;
   onClose: () => void;
+  /** Opens the extension dialog — the keyboard and touch path to what dragging a bar's end does. */
+  onExtend: (bar: TapeBar) => void;
   money: (minor: number, currency: string) => string;
   /** Strings only — a function prop cannot cross to a client component. */
   t: CalendarStayStrings;
 }
 
-export function StayModal({ bar, open, onClose, money, t }: StayModalProps) {
+export function StayModal({ bar, open, onClose, onExtend, money, t }: StayModalProps) {
   // The call site drops the bar the instant it closes, which would unmount the panel mid-exit and
   // make the close look like a cut rather than a dismissal. Holding the last one lets the 195ms
   // exit actually play; it is never read while the dialog is open.
@@ -68,6 +70,12 @@ export function StayModal({ bar, open, onClose, money, t }: StayModalProps) {
           {stay.arrived && <Action href={`/folio/${stay.reservationId}`} icon={LogOut} label={t.checkOut} primary />}
           <Action href={`/folio/${stay.reservationId}`} icon={Receipt} label={t.folio} />
           {stay.arrived && <Action href={`/minibar/${stay.reservationId}`} icon={PlusCircle} label={t.postCharge} />}
+          {stay.movable && (
+            <button type="button" onClick={() => onExtend(stay)}
+              className="inline-flex items-center gap-1.5 rounded-md border border-surface-border px-3 py-2 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-white">
+              <CalendarPlus className="h-3.5 w-3.5" /> {t.extend}
+            </button>
+          )}
           <Action href={`/reservation/${stay.reservationId}`} icon={ArrowUpRight} label={t.fullView} />
         </>
       }

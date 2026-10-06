@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Pin, User } from "lucide-react";
 import type { TapeRow, TapeDay, BarStatus, TapeBar } from "@/lib/tape-chart";
 import { StayModal } from "./StayModal";
+import { ExtendDialog } from "./ExtendDialog";
+import type { ExtensionOutcome, ExtensionQuote, ExtensionRefusal } from "@/lib/actions-extend";
 import { fill, LOCALE_LABELS } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
 import { moneyIn } from "@/lib/i18n/money";
@@ -13,10 +15,13 @@ import type { CalendarGridStrings } from "@/lib/i18n/calendar";
 /**
  * The draggable half of the calendar (§2.5).
  *
- * Drag a bar onto another room's row to move the stay there. Vertical only, deliberately: dragging
- * sideways would change the DATES, and extending a stay re-checks availability and re-prices — a
- * second validation surface that deserves its own flow rather than being smuggled into a gesture.
- * The spec calls drag-to-extend a fast-follow, and this respects that.
+ * Drag a bar onto another room's row to move the stay there. Moving the whole bar sideways is not a
+ * gesture here: it would change the DATES of a booking, which is a different conversation.
+ *
+ * Drag a bar's RIGHT END to extend the stay (the spec's fast-follow). That is its own gesture with
+ * its own handle, on pointer events rather than HTML5 drag-and-drop, so it works with a finger and
+ * cannot be mistaken for a move. Releasing it opens `ExtendDialog`, which prices the extra nights
+ * before anything is taken — the gesture says how far, a person says yes.
  *
  * The drop does not decide anything. It submits the same server action the move form uses, which
  * re-checks the room inside a transaction and refuses a clash. A drag is an easy gesture to make by
@@ -42,6 +47,8 @@ export interface TapeGridProps {
   moveAction: (fd: FormData) => Promise<{ moved: true; crossType: boolean; reservationId: string } | void>;
   /** Reads the pending price difference after a cross-type drop, so the prompt can open in place. */
   assessAction: (reservationId: string) => Promise<MoveAssessmentDto | null>;
+  quoteExtendAction: (assignmentId: string, newCheckOut: string) => Promise<ExtensionQuote | { ok: false; code: ExtensionRefusal }>;
+  extendAction: (fd: FormData) => Promise<ExtensionOutcome>;
   /** Strings only — see `CalendarGridStrings`. */
   t: CalendarGridStrings;
 }
@@ -64,7 +71,19 @@ function occupiedDuring(row: TapeRow, bar: TapeBar): boolean {
   return row.bars.some((b) => b.assignmentId !== bar.assignmentId && b.from <= bar.to && bar.from <= b.to);
 }
 
-export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveAction, assessAction, t }: TapeGridProps) {
+/** How many nights a stay could grow by before it meets the next stay in its room or the window's end. */
+function roomToGrow(row: TapeRow, bar: TapeBar, dates: string[]): number {
+  const end = dates.indexOf(bar.to);
+  if (end < 0) return 0;
+  const next = row.bars.filter((b) => b.assignmentId !== bar.assignmentId && b.from > bar.to).map((b) => dates.indexOf(b.from)).filter((i) => i >= 0);
+  const limit = next.length > 0 ? Math.min(...next) : dates.length;
+  return Math.max(0, Math.min(30, limit - end - 1));
+}
+
+const addDaysYmd = (ymd: string, n: number) =>
+  new Date(Date.parse(`${ymd}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveAction, assessAction, quoteExtendAction, extendAction, t }: TapeGridProps) {
   const locale = useLocale();
   const money = moneyIn(locale);
   const count = (n: number, one: string, many: string) => fill(n === 1 ? one : many, { n });
@@ -98,6 +117,18 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
   // opens its own dialog — which reads as the app doing something you did not ask for.
   const draggedAt = useRef(0);
   const assessmentReservationId = useRef<string | null>(null);
+
+  /*
+   * The stretch — dragging a bar's end. A ref drives it for the same reason as the move above
+   * (pointermove fires faster than renders commit); the state mirrors it for the ghost.
+   */
+  type Stretch = { bar: TapeBar; unitId: string; startX: number; max: number; extra: number };
+  const stretchRef = useRef<Stretch | null>(null);
+  const [stretch, setStretchState] = useState<Stretch | null>(null);
+  const setStretch = (s: Stretch | null) => { stretchRef.current = s; setStretchState(s); };
+  const [extending, setExtending] = useState<{ bar: TapeBar; checkOut: string } | null>(null);
+  const formatDate = (ymd: string) =>
+    new Date(`${ymd}T00:00:00Z`).toLocaleDateString(LOCALE_LABELS[locale].intl, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
 
   const span = dates.length;
   const gridCols = `${labelCol}px repeat(${span}, ${col}px)`;
@@ -289,6 +320,64 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                         </button>
                       );
                     })}
+
+                    {/* The extension handles: the right end of every stay that is still running and
+                        ends inside the window. A stay cut off by the window's edge has no end to grab. */}
+                    {row.bars.map((bar) => {
+                      if (!bar.movable || bar.continuesRight) return null;
+                      const startIdx = dates.indexOf(bar.from);
+                      if (startIdx < 0) return null;
+                      const right = (startIdx + bar.columns) * col - 2;
+                      return (
+                        <div
+                          key={`grow-${bar.assignmentId}`}
+                          title={t.extend.handle}
+                          aria-hidden
+                          data-extend-handle={bar.assignmentId}
+                          className="group absolute inset-y-1 z-10 flex w-3 cursor-ew-resize touch-none items-center justify-center"
+                          style={{ left: right - 12 }}
+                          onPointerDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            e.currentTarget.setPointerCapture(e.pointerId);
+                            setStretch({ bar, unitId: row.unitId, startX: e.clientX, max: roomToGrow(row, bar, dates), extra: 0 });
+                          }}
+                          onPointerMove={(e) => {
+                            const s = stretchRef.current;
+                            if (!s || s.bar.assignmentId !== bar.assignmentId) return;
+                            const extra = Math.max(0, Math.min(s.max, Math.round((e.clientX - s.startX) / col)));
+                            if (extra !== s.extra) setStretch({ ...s, extra });
+                          }}
+                          onPointerUp={() => {
+                            const s = stretchRef.current;
+                            setStretch(null);
+                            draggedAt.current = Date.now();
+                            if (s && s.extra > 0) setExtending({ bar: s.bar, checkOut: addDaysYmd(s.bar.stayTo, s.extra) });
+                          }}
+                          onPointerCancel={() => setStretch(null)}
+                        >
+                          <span className="h-4 w-1 rounded-full bg-white/80 shadow-sm opacity-70 transition-opacity group-hover:opacity-100" />
+                        </div>
+                      );
+                    })}
+
+                    {/* The extension ghost: the nights a release would ask about, at their real width. */}
+                    {stretch && stretch.unitId === row.unitId && (() => {
+                      const startIdx = dates.indexOf(stretch.bar.from);
+                      if (startIdx < 0) return null;
+                      const blocked = stretch.max === 0;
+                      return (
+                        <div
+                          aria-hidden
+                          className={`pointer-events-none absolute inset-y-1 flex items-center justify-center overflow-hidden rounded border-2 border-dashed text-[11px] font-bold ${
+                            blocked ? "border-danger-500 bg-danger-100/70 text-danger-700" : "border-accent-600 bg-accent-100/80 text-accent-800"
+                          }`}
+                          style={{ left: (startIdx + stretch.bar.columns) * col + 2, width: Math.max(1, stretch.extra) * col - 4 }}
+                        >
+                          {blocked ? "×" : stretch.extra > 0 ? `+${stretch.extra}` : ""}
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               );
@@ -309,7 +398,31 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
 
       {/* Rendered unconditionally so the dialog's exit animation has something to animate — it
           returns null until it has been given a stay at least once. */}
-      <StayModal bar={openBar} open={openBar != null} onClose={() => setOpenBar(null)} money={money} t={t.stay} />
+      <StayModal
+        bar={openBar}
+        open={openBar != null}
+        onClose={() => setOpenBar(null)}
+        onExtend={(bar) => { setOpenBar(null); setExtending({ bar, checkOut: addDaysYmd(bar.stayTo, 1) }); }}
+        money={money}
+        t={t.stay}
+      />
+
+      <ExtendDialog
+        bar={extending?.bar ?? null}
+        initialCheckOut={extending?.checkOut ?? null}
+        quoteAction={quoteExtendAction}
+        extendAction={extendAction}
+        onClose={() => setExtending(null)}
+        onDone={(outcome) => {
+          setExtending(null);
+          startTransition(() => router.refresh());
+          setToast(fill(outcome.mode === "linked" ? t.extend.linkedCreated : t.extend.extendedTo, { date: formatDate(outcome.newCheckOut) }));
+          window.setTimeout(() => setToast(null), 3200);
+        }}
+        money={money}
+        formatDate={formatDate}
+        t={t.extend}
+      />
 
       {/* §2.5's reconciliation PROMPT, on the calendar rather than on another screen. The move has
           already happened — what is open is money, and the spec asks a human to classify it. */}

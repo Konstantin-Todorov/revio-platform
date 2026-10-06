@@ -112,6 +112,12 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
   the original receipt in proportion; a security deposit (VAT at use) prints nothing when taken and
   is receipted when applied to the bill, in the method it was taken in. *`apps/pms/lib/fiscal-plan.ts`,
   12 tests.* Live 2026-10-06.
+- **Extend a stay by dragging it on the calendar.** Pull the end of a guest's bar and the extra nights
+  are priced at their own rate plan's price for those dates, tourist tax included, before anything is
+  taken — reception can change the amount. A booking from Booking.com or another channel is never
+  edited behind the channel's back: the extra nights become a separate reservation in the same room,
+  linked to the first and paid at the hotel. The room and the inventory are both checked at the moment
+  of saving, and the channels are updated. *`apps/pms/lib/actions-extend.ts`, `extend-stay.ts` (13 tests).*
 
 ## 6. RevioDirect — the hotel's own booking page
 

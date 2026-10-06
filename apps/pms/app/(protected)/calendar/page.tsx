@@ -5,6 +5,7 @@ import { getTapeChart, type BarStatus } from "@/lib/tape-chart";
 import { TapeGrid } from "@/components/calendar/TapeGrid";
 import { moveFromCalendar } from "@/lib/actions-frontdesk";
 import { fetchMoveAssessment } from "@/lib/actions-folio";
+import { extendStay, quoteExtension } from "@/lib/actions-extend";
 import { addDaysYmd } from "@/lib/format";
 import { i18n } from "@/lib/i18n/server";
 import { calendar } from "@/lib/i18n/calendar";
@@ -106,6 +107,8 @@ export default async function CalendarPage({
             returnTo={`/calendar?from=${from}&days=${span}`}
             moveAction={moveFromCalendar}
             assessAction={fetchMoveAssessment}
+            quoteExtendAction={quoteExtension}
+            extendAction={extendStay}
             t={t.grid}
           />
         </Card>
