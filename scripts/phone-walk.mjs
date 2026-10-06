@@ -77,7 +77,7 @@ const APPS = {
   },
   booking: { port: 3004, cookie: "", label: "RevioDirect", routes: [], publicOnly: true },
   operator: {
-    port: 3001, cookie: "revio_op_session", label: "Operator", operator: true,
+    port: Number(process.env.WALK_OPERATOR_PORT ?? 3001), cookie: "revio_op_session", label: "Operator", operator: true,
     routes: [
       "/overview", "/clients", "/clients?view=ours", "/clients/:tenantId", "/clients/:tenantId?tab=setup",
       "/clients/:tenantId?tab=channels", "/clients/:tenantId?tab=people", "/clients/:tenantId?tab=billing",

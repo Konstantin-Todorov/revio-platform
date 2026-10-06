@@ -12,6 +12,7 @@
     "./use-scroll-lock": "./src/use-scroll-lock.tsx",
     "./setup-checklist": "./src/setup-checklist.tsx",
     "./status-page": "./src/status-page.tsx",
+    "./wrong-property": "./src/wrong-property.tsx",
     "./version-skew": "./src/version-skew.tsx",
     "./skeleton": "./src/skeleton.tsx",
     "./welcome-shell": "./src/welcome-shell.tsx",

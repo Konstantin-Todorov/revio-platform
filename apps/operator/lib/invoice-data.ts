@@ -100,10 +100,17 @@ export function invoiceDocData(
     paid:
       invoice.status === "paid" && invoice.paidAt
         ? {
-            on: invoice.paidAt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
-            via: invoice.paidVia === "stripe" ? "Card" : invoice.paidVia === "manual" ? "Bank transfer" : null,
+            // In the document's own language: a Bulgarian invoice read "Платена 06 Oct 2026 · Bank transfer".
+            on: invoice.paidAt.toLocaleDateString(invoice.language === "en" ? "en-GB" : "bg-BG", { day: "numeric", month: "long", year: "numeric" }),
+            via: PAID_VIA[invoice.language === "en" ? "en" : "bg"][invoice.paidVia ?? ""] ?? null,
             reference: invoice.paidReference ?? null,
           }
         : null,
   };
 }
+
+/** How an invoice was paid, as each document language names it. */
+const PAID_VIA: Record<"en" | "bg", Record<string, string>> = {
+  en: { stripe: "Card", manual: "Bank transfer", cash: "Cash" },
+  bg: { stripe: "Карта", manual: "Банков превод", cash: "В брой" },
+};

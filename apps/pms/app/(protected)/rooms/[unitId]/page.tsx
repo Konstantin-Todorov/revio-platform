@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WrongProperty } from "@/components/reservation/WrongProperty";
+import { findUnitElsewhere } from "@/lib/elsewhere";
 import { ArrowLeft, Sparkles, Play, CircleCheck, Wrench, Ban, User, CircleDot } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { getRoomTimeline, type RoomEvent } from "@/lib/maintenance";
@@ -41,7 +43,11 @@ function eventText(e: RoomEvent, s: RoomsStrings["timeline"], priorities: Record
 export default async function RoomTimelinePage({ params }: { params: Promise<{ unitId: string }> }) {
   const { unitId } = await params;
   const data = await getRoomTimeline(unitId);
-  if (!data) notFound();
+  if (!data) {
+    const elsewhere = await findUnitElsewhere(unitId);
+    if (elsewhere) return <WrongProperty kind="room" href={`/rooms/${unitId}`} {...elsewhere} />;
+    notFound();
+  }
   const { unit, events } = data;
   const { t, locale } = await i18n();
   const s = t(rooms).timeline;

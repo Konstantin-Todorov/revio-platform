@@ -72,7 +72,12 @@ export async function setInvoiceStatus(fd: FormData): Promise<void> {
       // Attribution is part of the transition, not a separate step somebody might skip. A payment
       // with nobody's name on it is not a ledger entry.
       ...(status === "paid"
-        ? { paidAt: new Date(), paidById: session.userId, paidReference: optionalText(fd, "reference") }
+        ? {
+            paidAt: new Date(), paidById: session.userId, paidReference: optionalText(fd, "reference"),
+            // By hand means off-platform: a transfer unless the operator said cash. A card is Stripe's
+            // webhook to record, never this button.
+            paidVia: str(fd, "via") === "cash" ? "cash" : "manual",
+          }
         : {}),
     },
   });

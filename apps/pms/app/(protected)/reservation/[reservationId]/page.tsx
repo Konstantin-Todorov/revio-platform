@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft, Receipt, ArrowRightLeft, LogIn, DoorOpen, Building2, Tag, CreditCard,
-  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw, Users,
+  ShieldCheck, Utensils, CircleDot, PlusCircle, KeyRound, LogOut, Ban, Sparkles, RotateCcw, Users, CalendarPlus,
 } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { findReservationElsewhere, getReservationDetail, type TimelineEvent, type StayState } from "@/lib/folio";
@@ -25,7 +25,7 @@ const STATE_TONE: Record<StayState, Tone> = {
 };
 
 /** The timeline sentence in the reader's language, rebuilt from the kind and the room. */
-function eventLabel(e: TimelineEvent, s: ReservationStrings): string {
+function eventLabel(e: TimelineEvent, s: ReservationStrings, intl: string): string {
   const room = e.room ?? "";
   switch (e.kind) {
     case "booking": return s.events.booking;
@@ -36,18 +36,25 @@ function eventLabel(e: TimelineEvent, s: ReservationStrings): string {
     case "charge": return s.events.charge;
     case "payment": return s.events.payment;
     case "cancel": return s.events.cancel;
+    case "extended": {
+      const to = e.extendedTo
+        ? new Date(`${e.extendedTo}T00:00:00Z`).toLocaleDateString(intl, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" })
+        : "";
+      return s.events.extended(to, e.addedNights ?? null);
+    }
   }
 }
 
 const EVENT_ICON: Record<TimelineEvent["kind"], typeof CircleDot> = {
   booking: CircleDot, assigned: KeyRound, moved: ArrowRightLeft, checkin: LogIn,
-  checkout: LogOut, charge: PlusCircle, payment: CreditCard, cancel: Ban,
+  checkout: LogOut, charge: PlusCircle, payment: CreditCard, cancel: Ban, extended: CalendarPlus,
 };
 const EVENT_TINT: Record<TimelineEvent["kind"], string> = {
   booking: "bg-brand-100 text-brand-700", assigned: "bg-accent-100 text-accent-700",
   moved: "bg-warning-100 text-warning-700", checkin: "bg-success-100 text-success-700",
   checkout: "bg-ink-100 text-ink-600", charge: "bg-brand-50 text-brand-600",
   payment: "bg-success-50 text-success-600", cancel: "bg-danger-100 text-danger-700",
+  extended: "bg-accent-100 text-accent-700",
 };
 
 function Field({ icon: Icon, label, children }: { icon: typeof Tag; label: string; children: React.ReactNode }) {
@@ -80,8 +87,9 @@ export default async function ReservationViewPage({
     if (elsewhere) {
       return (
         <WrongProperty
-          reservationId={reservationId}
-          guestName={elsewhere.guestName ?? ""}
+          kind="booking"
+          href={`/reservation/${reservationId}`}
+          name={elsewhere.guestName ?? ""}
           propertyId={elsewhere.propertyId}
           propertyName={elsewhere.propertyName}
         />
@@ -307,7 +315,7 @@ export default async function ReservationViewPage({
                   {i < events.length - 1 && <span className="mt-1 w-px flex-1 bg-surface-border" />}
                 </div>
                 <div className="pt-0.5">
-                  <div className="text-[13px] font-semibold text-ink-900">{eventLabel(e, s)}</div>
+                  <div className="text-[13px] font-semibold text-ink-900">{eventLabel(e, s, intl)}</div>
                   {e.detail && <div className="text-[12px] text-ink-500">{e.detail}</div>}
                   <div className="tnum text-[11px] text-ink-400">{fmtTime(e.at, intl)}</div>
                 </div>

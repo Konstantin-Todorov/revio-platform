@@ -54,7 +54,10 @@ export interface PagesStrings {
   wrongProperty: {
     title: (guest: string, property: string) => string;
     thatBooking: string;
-    body: string;
+    /** What could not be opened, as the subject of `body`. */
+    things: { booking: string; guest: string; room: string };
+    roomNamed: (label: string) => string;
+    body: (thing: string) => string;
     switchTo: (property: string) => string;
     stay: string;
   };
@@ -122,7 +125,9 @@ export const pages: Translations<PagesStrings> = {
     wrongProperty: {
       title: (g, p) => `${g} is at ${p}`,
       thatBooking: "That booking",
-      body: "You are working in a different hotel right now, so this booking cannot be opened here. Switching takes you straight to it — everything else moves with you.",
+      things: { booking: "this booking", guest: "this guest's profile", room: "this room" },
+      roomNamed: (l) => `Room ${l}`,
+      body: (thing) => `You are working in a different hotel right now, so ${thing} cannot be opened here. Switching takes you straight to it — everything else moves with you.`,
       switchTo: (p) => `Switch to ${p}`,
       stay: "Stay here",
     },
@@ -188,7 +193,9 @@ export const pages: Translations<PagesStrings> = {
     wrongProperty: {
       title: (g, p) => `${g} е в ${p}`,
       thatBooking: "Тази резервация",
-      body: "В момента работите в друг хотел, затова резервацията не може да се отвори тук. Превключването Ви отвежда директно при нея — всичко останало се премества с Вас.",
+      things: { booking: "резервацията", guest: "профилът на госта", room: "стаята" },
+      roomNamed: (l) => `Стая ${l}`,
+      body: (thing) => `В момента работите в друг хотел, затова ${thing} не може да се отвори тук. Превключването Ви отвежда директно там — всичко останало се премества с Вас.`,
       switchTo: (p) => `Превключи към ${p}`,
       stay: "Остани тук",
     },

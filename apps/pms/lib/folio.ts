@@ -343,7 +343,12 @@ export async function reservationBalance(reservationId: string): Promise<number>
 }
 
 /** `label` is the English sentence; `room` lets a translated screen rebuild it in the reader's language. */
-export interface TimelineEvent { at: Date; label: string; detail?: string; room?: string; kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" }
+export interface TimelineEvent {
+  at: Date; label: string; detail?: string; room?: string;
+  /** An extension: the new departure and the nights it added. */
+  extendedTo?: string; addedNights?: number;
+  kind: "booking" | "assigned" | "moved" | "checkin" | "checkout" | "charge" | "payment" | "cancel" | "extended";
+}
 export type StayState = "booked" | "assigned" | "in_house" | "departed" | "cancelled";
 
 /**
@@ -448,6 +453,18 @@ export async function getReservationDetail(reservationId: string) {
     events.push({ at: l.postedAt, label: l.kind === "payment" ? "Payment recorded" : "Charge posted", detail: l.description, kind: l.kind === "payment" ? "payment" : "charge" });
   }
   if (r.cancelledAt) events.push({ at: r.cancelledAt, label: "Cancelled", kind: "cancel" });
+  // Extensions (actions-extend.ts) — the reservation changed length, which nothing else here shows.
+  // Read from the audit row the extension writes, keyed by this reservation's short id.
+  const extensions = await prisma.auditEntry.findMany({
+    where: { propertyId: property.id, entity: "stay_extended", field: { startsWith: `#${r.id.slice(-6)}` } },
+    select: { createdAt: true, newValue: true },
+  });
+  for (const x of extensions) {
+    const [to, nights] = (x.newValue ?? "").split(" · ");
+    const n = Number.parseInt(nights ?? "", 10);
+    if (!to) continue;
+    events.push({ at: x.createdAt, label: `Extended to ${to}`, extendedTo: to, ...(Number.isFinite(n) ? { addedNights: n } : {}), kind: "extended" });
+  }
   events.sort((a, b) => a.at.getTime() - b.at.getTime());
 
   return {

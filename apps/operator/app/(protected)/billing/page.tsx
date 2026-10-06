@@ -196,8 +196,30 @@ export default async function BillingPage() {
                           </>
                         )}
                         {allowedTransitions(c.currentInvoice).includes("paid") && (
-                          <form action={setInvoiceStatus}><input type="hidden" name="id" value={c.currentInvoice.id} /><input type="hidden" name="status" value="paid" />
-                            <SubmitButton className="inline-flex items-center gap-1 rounded border border-success-500 px-1.5 py-0.5 text-[11px] font-semibold text-success-600 hover:bg-success-50"><CheckCircle2 className="h-3 w-3" />Mark paid</SubmitButton></form>
+                          /* How it was paid and the transfer's reference are asked for here, because
+                             they are what the accountant matches the bank statement against — and
+                             this was a single button that recorded neither. */
+                          <details className="relative">
+                            <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded border border-success-500 px-1.5 py-0.5 text-[11px] font-semibold text-success-600 hover:bg-success-50">
+                              <CheckCircle2 aria-hidden className="h-3 w-3" />Mark paid
+                            </summary>
+                            <form action={setInvoiceStatus} className="absolute right-0 z-20 mt-1 w-60 space-y-2 rounded-md border border-surface-border bg-white p-3 text-left shadow-lg">
+                              <input type="hidden" name="id" value={c.currentInvoice.id} />
+                              <input type="hidden" name="status" value="paid" />
+                              <label className="block text-[11px] font-semibold text-ink-600">
+                                Paid by
+                                <select name="via" defaultValue="manual" className="mt-1 h-8 w-full rounded border border-surface-border bg-white px-1.5 text-[12px] text-ink-900">
+                                  <option value="manual">Bank transfer</option>
+                                  <option value="cash">Cash</option>
+                                </select>
+                              </label>
+                              <label className="block text-[11px] font-semibold text-ink-600">
+                                Reference <span className="font-normal text-ink-400">(optional)</span>
+                                <input name="reference" autoComplete="off" spellCheck={false} placeholder="e.g. the transfer's reference…" className="mt-1 h-8 w-full rounded border border-surface-border px-1.5 text-[12px] text-ink-900" />
+                              </label>
+                              <SubmitButton className="w-full rounded bg-success-600 px-2 py-1.5 text-[12px] font-semibold text-white hover:bg-success-700">Record payment</SubmitButton>
+                            </form>
+                          </details>
                         )}
                       </div>
                     )}

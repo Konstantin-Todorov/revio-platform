@@ -49,6 +49,7 @@
  *
  *     pnpm route-walk                # every app that is running
  *     pnpm route-walk --app pms      # one of them
+ *     WALK_OPERATOR_PORT=3011 pnpm route-walk   # the console on another port, when 3001 is taken
  *
  * Start the apps first (`pnpm --filter @revio/pms dev`). An app that is not listening is reported as
  * skipped, never as passing — "nothing answered" must never read as "nothing is wrong".
@@ -118,7 +119,7 @@ const APPS = {
     ],
   },
   operator: {
-    port: 3001, cookie: "revio_op_session", label: "Operator", operator: true,
+    port: Number(process.env.WALK_OPERATOR_PORT ?? 3001), cookie: "revio_op_session", label: "Operator", operator: true,
     routes: [
       "/overview", "/clients", "/leads", "/support", "/plans", "/billing", "/health",
       "/errors", "/auth-log", "/integrations", "/connectivity", "/analytics",

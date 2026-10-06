@@ -455,6 +455,18 @@ says who can move it. Details sit where the link points.
   102 kB shared, 138–151 kB per page, nothing heavy to cut. The waits were in the database: the booking
   step read extras, the hold and the words one after another, and the confirmation page made six
   independent reads in a row after the reservation; each is now one parallel step.
+- ~~**A guest, a room or a CRS booking at the account's other hotel was "not found"**~~ ✅ **2026-10-06**
+  — found by `route-walk` with no property chosen: RevioPMS guests and rooms, RevioCRS guests and
+  reservations answered 404 for a record of the sister hotel that search had just found (only the PMS
+  reservation view had the "switch to that hotel" screen, since 09-14). One screen now,
+  `@revio/ui/wrong-property`, used by both products for bookings, guests and rooms; the switch lands on
+  the record (checked by clicking it). After it, all four apps walk clean without a chosen property —
+  RevioLink 21, RevioCRS 24, RevioPMS 26, Operator 19. The walk scripts take `WALK_OPERATOR_PORT`.
+- ~~**"Mark paid" recorded neither how nor what**~~ ✅ **2026-10-06** — it asks *Bank transfer / Cash*
+  and an optional reference, and the paid invoice prints them in its own language ("Платена
+  6 октомври 2026 г. · Банков превод · <ref>" — it had read "06 Oct 2026 · Bank transfer").
+- ~~**Extensions were invisible on the reservation**~~ ✅ **2026-10-06** — the timeline shows "Престоят е
+  удължен до пт, 10 окт. · +2 нощувки" from the extension's audit row.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,

@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WrongProperty } from "@/components/shell/WrongProperty";
+import { findReservationElsewhere } from "@/lib/elsewhere";
 import { AlertTriangle, PencilLine } from "lucide-react";
 import { getReservationDetail, getCreateFormData, PAYMENT_GUARANTEES } from "@/lib/data";
 import { earliestSelectable } from "@revio/core";
@@ -33,7 +35,12 @@ export default async function ReservationDetailPage({
   const { id } = await params;
   const sp = await searchParams;
   const detail = await getReservationDetail(id);
-  if (!detail) notFound();
+  if (!detail) {
+    // At the account's other hotel — say where, rather than contradict the search that found it.
+    const elsewhere = await findReservationElsewhere(id);
+    if (elsewhere) return <WrongProperty kind="booking" href={`/reservations/${id}`} {...elsewhere} />;
+    notFound();
+  }
   const { property, reservation: r, timeline, todayIso } = detail;
   const line = r.lines[0];
   const { roomTypes } = await getCreateFormData();

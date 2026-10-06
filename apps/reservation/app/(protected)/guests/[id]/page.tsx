@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WrongProperty } from "@/components/shell/WrongProperty";
+import { findGuestElsewhere } from "@/lib/elsewhere";
 import { findDuplicateGuests, getGuestDetail } from "@/lib/data";
 import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
@@ -47,7 +49,11 @@ export default async function GuestDetailPage({
   // An erasure step always lands on Privacy & data, where its message is.
   const tab: Tab = eraseState ? "privacy" : (TABS as readonly string[]).includes(rawTab ?? "") ? (rawTab as Tab) : "profile";
   const detail = await getGuestDetail(id);
-  if (!detail) notFound();
+  if (!detail) {
+    const elsewhere = await findGuestElsewhere(id);
+    if (elsewhere) return <WrongProperty kind="guest" href={`/guests/${id}`} {...elsewhere} />;
+    notFound();
+  }
   const duplicates = await findDuplicateGuests(id);
   const { property, guest, derived, fromPms, notes } = detail;
   const { t: tr, money, day, locale } = await i18n();

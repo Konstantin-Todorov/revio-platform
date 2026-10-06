@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { WrongProperty } from "@/components/reservation/WrongProperty";
+import { findGuestElsewhere } from "@/lib/elsewhere";
 import { ArrowLeft, Mail, Phone, Building2, Bed, MapPin, Wine, StickyNote, GitMerge, Users } from "lucide-react";
 import { Card, CardHeader, PageHeader, StatusPill, type Tone } from "@/components/ui/primitives";
 import { getPmsGuestProfile } from "@/lib/guests";
@@ -28,7 +30,12 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
 export default async function GuestProfilePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const data = await getPmsGuestProfile(decodeURIComponent(id));
-  if (!data) notFound();
+  if (!data) {
+    // A guest of the account's other hotel — say where, rather than "not found". See WrongProperty.
+    const elsewhere = await findGuestElsewhere(decodeURIComponent(id));
+    if (elsewhere) return <WrongProperty kind="guest" href={`/guests/${encodeURIComponent(decodeURIComponent(id))}`} {...elsewhere} />;
+    notFound();
+  }
   const { property, guestId, guest, stats, favouriteItems, notes, reservations } = data;
   const cur = property.baseCurrency;
   const { t: tr, money } = await i18n();

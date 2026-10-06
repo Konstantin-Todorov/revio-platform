@@ -45,7 +45,7 @@ const APPS = {
   "channel-manager": { port: 3000, cookie: "revio_session", label: "RevioLink", home: "/dashboard", query: "deluxe" },
   reservation: { port: 3002, cookie: "revio_crs_session", label: "RevioCRS", home: "/dashboard", query: "deluxe" },
   pms: { port: 3003, cookie: "revio_pms_session", label: "RevioPMS", home: "/dashboard", query: "deluxe" },
-  operator: { port: 3001, cookie: "revio_op_session", label: "Operator", home: "/overview", query: "sofia", operator: true },
+  operator: { port: Number(process.env.WALK_OPERATOR_PORT ?? 3001), cookie: "revio_op_session", label: "Operator", home: "/overview", query: "sofia", operator: true },
 };
 
 function psql(sql) {

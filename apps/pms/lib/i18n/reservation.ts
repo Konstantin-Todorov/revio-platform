@@ -54,6 +54,7 @@ export interface ReservationStrings {
     charge: string;
     payment: string;
     cancel: string;
+    extended: (to: string, nights: number | null) => string;
   };
 }
 
@@ -114,6 +115,7 @@ export const reservation: Translations<ReservationStrings> = {
       charge: "Charge posted",
       payment: "Payment recorded",
       cancel: "Cancelled",
+      extended: (to, n) => `Stay extended to ${to}${n ? ` · ${n} ${n === 1 ? "night" : "nights"} added` : ""}`,
     },
   },
   bg: {
@@ -172,6 +174,7 @@ export const reservation: Translations<ReservationStrings> = {
       charge: "Начисление",
       payment: "Записано плащане",
       cancel: "Анулирана",
+      extended: (to, n) => `Престоят е удължен до ${to}${n ? ` · +${n} ${n === 1 ? "нощувка" : "нощувки"}` : ""}`,
     },
   },
 };
