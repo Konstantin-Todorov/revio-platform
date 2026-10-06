@@ -98,7 +98,9 @@ const JOBS = [
   { name: "trial-sweep", url: OPERATOR && `${OPERATOR}/api/jobs/trials` },
   // Keeps the demo hotels mid-service. Harmless if it fails — nothing a customer touches depends on
   // it — but a blank demo calendar is what a hotel sees before deciding to trust us.
-  { name: "demo-refresh", url: OPERATOR && `${OPERATOR}/api/jobs/demo-refresh` },
+  // `critical: false`: its failure is printed and the health page still shows it, but it does not turn
+  // the run red — a red run emails "Deployment crashed", and that email has to mean a hotel is affected.
+  { name: "demo-refresh", url: OPERATOR && `${OPERATOR}/api/jobs/demo-refresh`, critical: false },
   // Drafting invoices is scheduled, not a button somebody has to remember in the right month.
   { name: "invoice-run", url: OPERATOR && `${OPERATOR}/api/jobs/invoices` },
 
@@ -114,7 +116,7 @@ const JOBS = [
 /** Long enough for a night audit across many properties; short enough that a hung job ends the run. */
 const TIMEOUT_MS = 120_000;
 
-async function run({ name, url }) {
+async function run({ name, url, critical = true }) {
   if (!url) {
     console.warn(`skip  ${name} — its service URL is not configured`);
     return { name, skipped: true };
@@ -133,7 +135,7 @@ async function run({ name, url }) {
     if (!res.ok) {
       console.error(`FAIL  ${name} — HTTP ${res.status} in ${ms}ms · ${body.slice(0, 300)}`);
       // 502/503/504 is the service not answering (restarting, deploying) — not the job failing.
-      return { name, ok: false, transient: res.status >= 502 && res.status <= 504 };
+      return { name, ok: false, critical, transient: res.status >= 502 && res.status <= 504 };
     }
 
     /**
@@ -155,11 +157,11 @@ async function run({ name, url }) {
           `${looksLikePage ? " (an HTML page — the request reached a screen, not the job; check the app's middleware matcher)" : ""}` +
           ` · ${body.slice(0, 200)}`,
       );
-      return { name, ok: false };
+      return { name, ok: false, critical };
     }
     if (parsed?.ok === false) {
       console.error(`FAIL  ${name} — the job reported failure in ${ms}ms · ${body.slice(0, 300)}`);
-      return { name, ok: false };
+      return { name, ok: false, critical };
     }
 
     console.info(`ok    ${name} — ${ms}ms · ${body.slice(0, 300)}`);
@@ -169,7 +171,7 @@ async function run({ name, url }) {
     const reason = err?.name === "AbortError" ? `timed out after ${TIMEOUT_MS}ms` : String(err);
     console.error(`FAIL  ${name} — ${reason} (${ms}ms)`);
     // No answer at all (timeout, connection refused/reset) — usually the target was mid-deploy.
-    return { name, ok: false, transient: true };
+    return { name, ok: false, critical, transient: true };
   } finally {
     clearTimeout(timer);
   }
@@ -207,7 +209,10 @@ if (transient.length > 0) {
 const failed = results.filter((r) => r.ok === false);
 const ran = results.filter((r) => !r.skipped);
 console.info(`\nrun-jobs: ${ran.length - failed.length}/${ran.length} succeeded.`);
-if (failed.length > 0) {
-  console.error(`run-jobs: failed — ${failed.map((f) => f.name).join(", ")}`);
+const minor = failed.filter((f) => f.critical === false);
+if (minor.length > 0) console.warn(`run-jobs: non-critical job(s) failed, run stays green — ${minor.map((f) => f.name).join(", ")}`);
+const critical = failed.filter((f) => f.critical !== false);
+if (critical.length > 0) {
+  console.error(`run-jobs: failed — ${critical.map((f) => f.name).join(", ")}`);
   process.exit(1);
 }
