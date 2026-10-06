@@ -1,0 +1,61 @@
+# docs.reviosoft.app — Railpack's static Caddyfile (core/providers/staticfile/Caddyfile.template),
+# kept as-is except the security headers, which close HANDOFF-2026-09-22 §9: no HSTS and no frame
+# protection. The CSP is narrowed to what this site actually loads: its own files, the reviosoft.app
+# icons, and Google Fonts.
+{
+	admin off
+	persist_config off
+	auto_https off
+
+	log {
+		format json
+	}
+
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+:{$PORT:80} {
+	log {
+		format json
+	}
+
+	respond /health 200
+
+	# README.md is kept out of the upload by .railwayignore — a file that is not on the server cannot be
+	# served. (Caddy's `hide` and a path matcher both failed to stop it after try_files' rewrite.)
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "DENY"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: https://reviosoft.app; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+		X-Revio-Docs-Config "5"
+		-Server
+	}
+
+	root * .
+
+	file_server {
+		hide .git
+		hide .env*
+		hide Caddyfile
+		hide README.md
+		hide .DS_Store
+	}
+
+	encode {
+		gzip
+		zstd
+	}
+
+	try_files {path} {path}.html {path}/index.html
+
+	handle_errors {
+		rewrite * /{err.status_code}.html
+		file_server
+	}
+}

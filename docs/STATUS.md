@@ -411,7 +411,7 @@ says who can move it. Details sit where the link points.
   restriction rules; the push reads both. Harmless until a CRS rule stop-sells every plan.
 - **Ventsi Group** is suspended and disconnected and still holds a per-tenant Channex credential, which
   overrides the platform key (root `CLAUDE.md` §4). Decide before reinstating them.
-- **`docs.reviosoft.app`** has no HSTS or frame protection and is built outside both repos. `HANDOFF` §9.
+- ~~**`docs.reviosoft.app`** has no HSTS or frame protection~~ ✅ **2026-10-06** — `design/docs-preview/Caddyfile`: HSTS, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, a CSP narrowed to what it loads; its internal README was public at /README.md and is now kept out of the upload. Deploy command in that folder's README.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,

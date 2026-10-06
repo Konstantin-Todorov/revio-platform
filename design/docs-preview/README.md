@@ -21,3 +21,11 @@ The readability pass uses larger body, heading, navigation and in-page contents 
 Sources checked read-only: apps/channel-manager/app/(protected)/sync/page.tsx (Activity, Errors, Audit Log, channel limitations); apps/pms/app/(protected)/housekeeping/page.tsx (Smart order, By floor, room/occupancy indicators). Mapping and inventory boundaries come from root CLAUDE.md and AGENTS.md; detailed workflows need current UI verification with the hotel-test fixes. No internal documentation is copied automatically to the public bundle.
 
 The complete planned collection hierarchy and publication checklist live in docs/DOCUMENTATION-PLAN.md. Operator content stays outside the public bundle. Keep the current `noindex` JavaScript preview labelled as a preview until content, accessibility and UI verification are signed off.
+
+## Deploying and security headers (2026-10-06)
+
+Publish with `railway up design/docs-preview --path-as-root --service docs --environment production`
+from the repo root — never a platform deploy. `Caddyfile` is Railpack's static template plus HSTS,
+`X-Frame-Options: DENY`, a CSP narrowed to what the site loads (its own files, reviosoft.app icons,
+Google Fonts) with `frame-ancestors 'none'`, and a Permissions-Policy. `.railwayignore` keeps this
+README out of the upload: it used to be served publicly at /README.md.
