@@ -50,6 +50,12 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
   const { error, moved } = await searchParams;
   const { t, money, locale } = await i18n();
   const s = t(folioDict);
+  // Deposit lines are stored in English ("Аванс deposit (held) · pi_…"); say them in the reader's language.
+  const lineText = (l: { description: string; depositTypeId: string | null }) => {
+    const m = l.depositTypeId ? /^(.+?) deposit(?: \(held\))?(?: · (.+))?$/.exec(l.description) : null;
+    if (m) return `${s.depositLine(m[1]!)}${m[2] ? ` · ${m[2]}` : ""}`;
+    return s.systemText[l.description] ?? l.description;
+  };
   const data = await getFolioView(reservationId);
   if (!data) redirect("/folios");
   const { reservation: r, folios, currency, combined, moveTargets, depositTypes, stayExtras, isManager, fiscal, fiscalDevice } = data!;
@@ -211,7 +217,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                     {/* Only the line itself fades when voided — a storno still owed under it must not. */}
                     <div className={`flex min-w-0 items-center gap-2.5 ${l.voided ? "opacity-50" : ""}`}>
                       <StatusPill tone={KIND_TONE[l.kind] ?? "neutral"}>{s.kinds[l.kind] ?? l.kind}</StatusPill>
-                      <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{s.systemText[l.description] ?? l.description}</span>
+                      <span className={`truncate text-[13px] ${l.voided ? "text-ink-400 line-through" : "text-ink-800"}`}>{lineText(l)}</span>
                       {l.outlet && !isPayment && <span className="rounded bg-surface-muted px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-ink-400">{s.outlets[l.outlet] ?? l.outlet}</span>}
                       {l.voided && <span className="text-[10.5px] font-semibold uppercase tracking-wide text-danger-500">{s.void}</span>}
                     </div>
@@ -317,7 +323,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <option value="company_account">{s.payment.methods.company_account}</option>
                   <option value="bank_transfer">{s.payment.methods.bank_transfer}</option>
                 </select>
-                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} flex-1`} />
+                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
               </div>
               {cardOnFile !== null && (
                 <label className="flex items-center gap-2 text-[12px] text-ink-600">
@@ -326,7 +332,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                 </label>
               )}
               <div className="flex gap-2">
-                <input name="ref" type="text" placeholder={s.payment.reference} className={`${inputCls} flex-1`} />
+                <input name="ref" type="text" placeholder={s.payment.reference} className={`${inputCls} min-w-0 flex-1`} />
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-accent-500 px-3 text-[12.5px] font-semibold text-accent-600 transition-colors hover:bg-accent-50" pendingLabel={s.payment.recording}>
                   <CreditCard className="h-3.5 w-3.5" /> {s.payment.take}
                 </SubmitButton>
@@ -368,7 +374,7 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   {s.checkout.outstandingLead} <span className="font-bold text-danger-600">{money(combined.balance, currency)}</span> {s.checkout.outstandingTail(folios.length)}
                 </p>
                 <div className="flex gap-2">
-                  <input name="reason" type="text" placeholder={s.checkout.overridePlaceholder} className={`${inputCls} flex-1`} />
+                  <input name="reason" type="text" placeholder={s.checkout.overridePlaceholder} className={`${inputCls} min-w-0 flex-1`} />
                   <SubmitButton className="inline-flex items-center gap-1.5 rounded-md border border-danger-500 px-3 py-2 text-[12.5px] font-semibold text-danger-600 transition-colors hover:bg-danger-50" pendingLabel={s.checkout.title + "…"}>
                     <LogOut className="h-3.5 w-3.5" /> {s.checkout.withBalance}
                   </SubmitButton>
@@ -397,10 +403,10 @@ export default async function FolioPage({ params, searchParams }: { params: Prom
                   <option value="extra">{s.charge.kinds.extra}</option>
                   <option value="fee">{s.charge.kinds.fee}</option>
                 </select>
-                <input name="description" required placeholder={s.charge.description} className={`${inputCls} flex-1`} />
+                <input name="description" required placeholder={s.charge.description} className={`${inputCls} min-w-0 flex-1`} />
               </div>
               <div className="flex gap-2">
-                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} flex-1`} />
+                <input name="amount" type="text" inputMode="decimal" required placeholder={s.payment.amount(currency)} className={`${inputCls} min-w-0 flex-1`} />
                 <SubmitButton className="inline-flex items-center gap-1.5 rounded-md bg-accent-600 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-accent-500" pendingLabel={s.charge.posting}>
                   <Plus className="h-3.5 w-3.5" /> {s.charge.add}
                 </SubmitButton>

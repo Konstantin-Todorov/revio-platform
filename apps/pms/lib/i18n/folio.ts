@@ -150,6 +150,8 @@ export interface FolioStrings {
    * typed. Lines already stored keep their English in the database, which is correct: it is a record.
    */
   systemText: Record<string, string>;
+  /** A deposit line, stored as "<type> deposit (held)" — the pill already says held or applied. */
+  depositLine: (typeName: string) => string;
 }
 
 export const folio: Translations<FolioStrings> = {
@@ -344,6 +346,7 @@ export const folio: Translations<FolioStrings> = {
     changeDecision: "Change this decision",
     footnote: "Money that arrived off-system and money that was written off both close the folio at zero, and are recorded separately — one is revenue collected, the other is revenue lost.",
     systemText: { Guest: "Guest", "City tax": "City tax", "Prepaid via OTA": "Prepaid via OTA", "Deposit applied to balance": "Deposit applied to balance", "Deposit refunded": "Deposit refunded" },
+    depositLine: (t) => `${t} deposit`,
   },
   bg: {
     back: "Сметки",
@@ -536,5 +539,6 @@ export const folio: Translations<FolioStrings> = {
     changeDecision: "Промени решението",
     footnote: "Платеното извън системата и отписаното затварят сметката на нула, но се записват отделно — едното е събран приход, другото е загубен.",
     systemText: { Guest: "Гост", "City tax": "Туристически данък", "Prepaid via OTA": "Предплатено чрез OTA", "Deposit applied to balance": "Депозит, приспаднат от салдото", "Deposit refunded": "Върнат депозит" },
+    depositLine: (t) => `Депозит „${t}“`,
   },
 };
