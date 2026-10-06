@@ -17,6 +17,7 @@ export interface StaysStrings {
     roomSlot: (n: number | "") => string;
     free: (n: number) => string;
     suggested: (reason: string) => string;
+    preassigned: (room: string) => string;
     selectRoom: string;
     override: string;
     noneFree: string;
@@ -72,6 +73,7 @@ export const stays: Translations<StaysStrings> = {
       roomSlot: (n) => `Room ${n}`,
       free: (n) => `(${n} free)`,
       suggested: (r) => `Suggested · ${r}`,
+      preassigned: (room) => `Room ${room} was set aside for this guest`,
       selectRoom: "Select a room…",
       override: "Allow override (assign a room that isn’t clean or is a different type — logged)",
       noneFree: "No clean, free rooms of this type right now. Tick “Allow override” to assign one anyway, or clean a room first.",
@@ -136,6 +138,7 @@ export const stays: Translations<StaysStrings> = {
       roomSlot: (n) => `Стая ${n}`,
       free: (n) => `(${n} свободни)`,
       suggested: (r) => `Предложение · ${r}`,
+      preassigned: (room) => `Стая ${room} е запазена за този гост`,
       selectRoom: "Изберете стая…",
       override: "Разреши изключение (стая, която не е почистена или е от друг тип — записва се)",
       noneFree: "В момента няма чиста свободна стая от този тип. Отметнете „Разреши изключение“, за да настаните все пак, или първо почистете стая.",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { loadTags, readConsent, revokeTags, writeConsent } from "@/lib/tags";
+import { clearTrackingCookies, loadTags, readConsent, revokeTags, writeConsent } from "@/lib/tags";
 
 /**
  * Asks the guest before the hotel's Google Analytics / Meta pixel load — and renders nothing at all
@@ -21,6 +21,7 @@ export function Consent({ slug, tags, s }: {
     const v = readConsent(slug);
     if (v === "granted") loadTags(tags);
     else if (v == null) setOpen(true);
+    else clearTrackingCookies(); // a "No" from an earlier visit still leaves nothing behind
     const reopen = () => setOpen(true);
     window.addEventListener("revio:consent-open", reopen);
     return () => window.removeEventListener("revio:consent-open", reopen);

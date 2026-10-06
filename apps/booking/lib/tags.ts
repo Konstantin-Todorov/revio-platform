@@ -65,7 +65,28 @@ export function loadTags(tags: Tags): void {
 export function revokeTags(): void {
   window.gtag?.("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
   window.fbq?.("consent", "revoke");
+  clearTrackingCookies();
 }
+
+/**
+ * Withdrawing consent removes what the tags already stored, not only what they would store next —
+ * a "No" that leaves the identifier in place still lets it be read on the guest's next visit.
+ * Google writes `_ga`, `_ga_<id>` and `_gid`; Meta `_fbp` and `_fbc`, on this host or its parent.
+ */
+export function clearTrackingCookies(): void {
+  if (typeof document === "undefined") return;
+  const names = document.cookie.split(";").map((c) => c.split("=")[0]!.trim()).filter((n) => TRACKING_COOKIE.test(n));
+  const host = location.hostname;
+  const parts = host.split(".");
+  const domains = ["", host, ...parts.map((_, i) => "." + parts.slice(i).join(".")).filter((d) => d.split(".").length > 2)];
+  for (const n of names) {
+    for (const d of domains) {
+      document.cookie = `${n}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/${d ? `; domain=${d}` : ""}`;
+    }
+  }
+}
+
+const TRACKING_COOKIE = /^(_ga(_[A-Z0-9]+)?|_gid|_gat.*|_fbp|_fbc)$/;
 
 /**
  * One purchase per booking reference — never the guest's name, email or phone.

@@ -552,7 +552,11 @@ export async function availableUnitsByRoomType(
     .filter((g) => g.units.some((u) => u.available));
 }
 
-export async function availableUnitsFor(roomTypeId: string, checkIn: string, checkOut: string, excludeAssignmentId?: string): Promise<AvailableUnit[]> {
+export async function availableUnitsFor(
+  roomTypeId: string, checkIn: string, checkOut: string, excludeAssignmentId?: string,
+  /** A stay's own rooms set aside before arrival are not busy for that stay's check-in. */
+  excludeReservationId?: string,
+): Promise<AvailableUnit[]> {
   const roomType = await prisma.roomType.findUnique({ where: { id: roomTypeId }, select: { propertyId: true } });
   const defs = roomType ? await prisma.propertyDefaults.findUnique({ where: { propertyId: roomType.propertyId }, select: { inspectionGate: true } }) : null;
   const sellable = new Set(sellableStatuses(defs?.inspectionGate ?? false));
@@ -570,6 +574,7 @@ export async function availableUnitsFor(roomTypeId: string, checkIn: string, che
       checkIn: { lt: utcDay(checkOut) },
       checkOut: { gt: utcDay(checkIn) },
       ...(excludeAssignmentId ? { id: { not: excludeAssignmentId } } : {}),
+      ...(excludeReservationId ? { NOT: { reservationId: excludeReservationId, checkedInAt: null } } : {}),
     },
     select: { unitId: true },
   });

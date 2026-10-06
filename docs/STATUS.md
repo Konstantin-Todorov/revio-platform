@@ -426,6 +426,18 @@ says who can move it. Details sit where the link points.
   `apps/pms/lib/extend-stay.ts` (13 tests). Checked in the browser, desk and phone: direct with folio
   (2 nights, typed price, tourist tax for the new nights only), channel booking → linked reservation,
   a plan with no rate (reception must type one).
+- ~~**A room set aside before arrival blocked the check-in**~~ ✅ **2026-10-06** — the check-in screen
+  read "has a room" as "has arrived", so every stay placed by automatic assignment (or moved before
+  arrival) opened as *Already checked in* with no button. Production exposure: the demo hotel only (5
+  stays); no real client has automatic assignment on. Now the room set aside is the default and the
+  check-in turns that assignment into the arrival; choosing another room releases it ("moved").
+  Linked extensions (`apps/pms/lib/linked-stay.ts`) are checked in with the first stay, and checking
+  out the first stay leaves the room clean while the guest stays on. The reservation view names the
+  linked stay on both halves.
+- ~~**RevioDirect: "No" to cookies kept the cookies**~~ ✅ **2026-10-06** — withdrawing consent stopped
+  the tags but left `_ga`/`_fbp` in place; `clearTrackingCookies` (`apps/booking/lib/tags.ts`) now
+  removes them on withdrawal and on any later visit that said no. Checked at phone width: nothing
+  loads before consent, both tags load after it, the footer button reopens the choice.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,

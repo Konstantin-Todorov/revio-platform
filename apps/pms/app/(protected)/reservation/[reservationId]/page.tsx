@@ -15,6 +15,7 @@ import { common } from "@/lib/i18n/common";
 import { stays } from "@/lib/i18n/stays";
 import { reservation as reservationDict, type ReservationStrings } from "@/lib/i18n/reservation";
 import { GuestRegisterCard } from "@/components/register/GuestRegisterCard";
+import { linkedStays } from "@/lib/linked-stay";
 
 import { SubmitButton } from "@revio/ui/submit-button";
 export const dynamic = "force-dynamic";
@@ -95,6 +96,7 @@ export default async function ReservationViewPage({
   const back = t(stays).backToDesk;
   const intl = locale === "bg" ? "bg-BG" : "en-GB";
   const state = { tone: STATE_TONE[o.stayState], label: s.states[o.stayState] };
+  const linked = await linkedStays(reservationId);
 
   return (
     <div className="mx-auto max-w-4xl">
@@ -115,6 +117,22 @@ export default async function ReservationViewPage({
       <p className="mb-4 text-[11.5px] text-ink-400">
         {s.sharedRecord}
       </p>
+
+      {/* An extension of a channel booking is a second reservation by design (actions-extend.ts).
+          Said here, on both of them, so nobody reads one half of the stay as the whole of it. */}
+      {linked.length > 0 && (
+        <div className="mb-4 rounded-md border border-brand-200 bg-brand-50 px-4 py-3 text-[13px] text-brand-800">
+          <div className="font-semibold">{s.linked.title}</div>
+          <ul className="mt-1 space-y-0.5">
+            {linked.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-baseline gap-x-2">
+                <span>{s.linked.line(l.checkIn ?? "?", l.checkOut ?? "?", l.fromChannel)}</span>
+                <Link href={`/reservation/${l.id}`} className="font-semibold underline">{s.linked.open}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error === "register_kept" && (
         <div className="mb-4 rounded-md border border-warning-600/30 bg-warning-50 px-4 py-3 text-[13px] font-medium text-warning-700">

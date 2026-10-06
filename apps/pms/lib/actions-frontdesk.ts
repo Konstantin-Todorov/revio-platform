@@ -17,6 +17,7 @@ import { ensureFolio, reservationBalance } from "./folio";
 import { stayScope } from "@revio/connectivity";
 import { logAudit, recordSync, str, int } from "./mutation-helpers";
 import { emailReceipt } from "./guest-receipt";
+import { continuationsOf } from "./linked-stay";
 import { setFlash } from "@revio/ui/flash";
 import { i18n } from "./i18n/server";
 import { flash as flashDict } from "./i18n/flash";
@@ -88,8 +89,12 @@ export async function checkIn(fd: FormData): Promise<void> {
       if (unit!.roomTypeId !== line!.roomTypeId) redirect(`/checkin/${reservationId}?error=type`);
       if (!SERVICEABLE.includes(unit!.hkStatus)) redirect(`/checkin/${reservationId}?error=dirty`);
     }
+    // The stay's own room set aside before arrival (automatic assignment) is not a clash for it.
     const clash = await prisma.roomAssignment.count({
-      where: { unitId: unitId!, status: "active", checkedOutAt: null, checkIn: { lt: line!.checkOut }, checkOut: { gt: line!.checkIn } },
+      where: {
+        unitId: unitId!, status: "active", checkedOutAt: null, checkIn: { lt: line!.checkOut }, checkOut: { gt: line!.checkIn },
+        NOT: { reservationId, checkedInAt: null },
+      },
     });
     if (clash > 0) redirect(`/checkin/${reservationId}?error=busy`);
     seenUnits.add(unitId!);
@@ -109,7 +114,27 @@ export async function checkIn(fd: FormData): Promise<void> {
    * second room went to somebody else in the same second.
    */
   const lost = await withTenantTransaction(session.tenantId, async (tx) => {
+    /*
+     * Rooms set aside before arrival. One the desk kept becomes the check-in itself; one it did not
+     * is released ("moved" — the guest was reassigned, never departed) BEFORE the new rooms are
+     * claimed, so the claim does not count it as a clash.
+     */
+    const held = await tx.roomAssignment.findMany({
+      where: { reservationId, status: "active", checkedOutAt: null, checkedInAt: null },
+    });
+    const kept = new Set<string>();
+    for (const h of held) {
+      const spec = specs.find((sp) => sp.lineId === h.reservationLineId && sp.unitId === h.unitId && !kept.has(`${sp.lineId}:${sp.unitId}`));
+      if (spec) {
+        await tx.$queryRaw`SELECT id FROM "Unit" WHERE id = ${h.unitId} FOR UPDATE`;
+        await tx.roomAssignment.update({ where: { id: h.id }, data: { checkedInAt: now, ...(override ? { note: "assigned with override" } : {}) } });
+        kept.add(`${spec.lineId}:${spec.unitId}`);
+      } else {
+        await tx.roomAssignment.update({ where: { id: h.id }, data: { status: "moved", note: "reassigned at check-in" } });
+      }
+    }
     for (const spec of specs) {
+      if (kept.has(`${spec.lineId}:${spec.unitId}`)) continue;
       const created = await claimUnitForStay(tx, {
         tenantId: session.tenantId, propertyId: session.activePropertyId, reservationId,
         reservationLineId: spec.lineId, unitId: spec.unitId,
@@ -124,6 +149,14 @@ export async function checkIn(fd: FormData): Promise<void> {
     throw err;
   });
   if (lost) redirect(`/checkin/${reservationId}?error=busy`);
+
+  // A linked continuation in the same room (an extension of a channel booking) arrives with this
+  // stay — the guest walks in once, not twice.
+  const continuing = await continuationsOf(prisma, specs.map((sp) => ({ reservationId, unitId: sp.unitId, checkOut: sp.checkOut })));
+  for (const c of continuing.filter((c) => c.checkedInAt == null)) {
+    await prisma.roomAssignment.update({ where: { id: c.id }, data: { checkedInAt: now } });
+    await ensureFolio(session.tenantId, session.activePropertyId, c.reservationId);
+  }
 
   for (const spec of specs) {
     await logAudit(session.activePropertyId, session.tenantId, {
@@ -190,8 +223,15 @@ export async function checkOut(fd: FormData): Promise<void> {
       include: { unit: { select: { label: true } }, reservation: { select: { guestName: true } } },
     });
 
+    // A guest whose stay continues in this room under a linked reservation has not left it.
+    const continuing = new Set((await continuationsOf(tx, assignments.map((a) => ({ reservationId, unitId: a.unitId, checkOut: a.checkOut }))))
+      .filter((c) => c.checkedInAt != null).map((c) => c.unitId));
     for (const a of assignments) {
       await tx.roomAssignment.update({ where: { id: a.id }, data: { checkedOutAt: now } });
+      if (continuing.has(a.unitId)) {
+        audits.push({ entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "first stay closed · guest stays on under the linked reservation" });
+        continue;
+      }
       await tx.unit.update({ where: { id: a.unitId }, data: { hkStatus: "dirty" } });
       audits.push({ entity: "check_out", field: a.unit.label, oldValue: a.reservation.guestName, newValue: "departed · room now dirty" });
     }

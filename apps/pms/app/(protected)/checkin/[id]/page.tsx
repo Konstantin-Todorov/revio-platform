@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft, LogIn, DoorOpen, AlertTriangle, Wand2 } from "lucide-react";
+import { ArrowLeft, LogIn, DoorOpen, AlertTriangle, Wand2, KeyRound } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui/primitives";
 import { getReservationForCheckin, availableUnitsFor, suggestUnit, type AvailableUnit } from "@/lib/data";
 import { checkIn } from "@/lib/actions-frontdesk";
@@ -27,29 +27,46 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
   if (!data) redirect("/dashboard");
   const { reservation: r, preferredFloor } = data!;
 
-  const alreadyIn = r.assignments.length > 0;
+  /*
+   * ⚠️ Arrived means CHECKED IN, not "has a room". It was `assignments.length > 0`, written when a
+   * room was only ever given at check-in. Automatic assignment places stays days ahead, and from then
+   * on every one of them opened here as "Already checked in" with no button — a guest standing at
+   * the desk with a room set aside could not be checked in at all. A room set aside is offered as
+   * the default instead.
+   */
+  const arrived = r.assignments.filter((a) => a.checkedInAt != null);
+  const alreadyIn = arrived.length > 0;
+  const setAside = r.assignments.filter((a) => a.checkedInAt == null);
   // A departed stay must not be offered a check-in button. The ACTION refuses it (that guard is what
   // fixes the bug), but a page that shows a control which can only fail is its own small dead end —
   // and this is the exact screen someone reached when they resurrected a checked-out reservation.
   const departed = r.departedAt != null;
 
   // Expand each line into `quantity` room slots and fetch available units for each line's room type once.
+  // A room set aside for THIS stay is not busy for it.
   const byRoomType = new Map<string, AvailableUnit[]>();
+  const ownUnits = new Set(setAside.map((a) => a.unitId));
   for (const line of r.lines) {
     if (!byRoomType.has(line.roomTypeId)) {
-      byRoomType.set(line.roomTypeId, await availableUnitsFor(line.roomTypeId, ymd(line.checkIn), ymd(line.checkOut)));
+      const units = await availableUnitsFor(line.roomTypeId, ymd(line.checkIn), ymd(line.checkOut), undefined, r.id);
+      byRoomType.set(line.roomTypeId, units);
     }
   }
+  const heldLeft = [...setAside];
   // Suggest a room per slot (spec §4.1) — assign physical rooms LATE, but propose the best one now.
   const usedSuggestions = new Set<string>();
   const slots = r.lines.flatMap((line) =>
     Array.from({ length: Math.max(1, line.quantity) }, (_, i) => {
       const units = byRoomType.get(line.roomTypeId) ?? [];
-      const pick = suggestUnit(units.filter((u) => !usedSuggestions.has(u.id)), preferredFloor);
+      const heldIdx = heldLeft.findIndex((a) => a.reservationLineId === line.id && ownUnits.has(a.unitId));
+      const held = heldIdx >= 0 ? heldLeft.splice(heldIdx, 1)[0]! : null;
+      const pick = held ? null : suggestUnit(units.filter((u) => !usedSuggestions.has(u.id)), preferredFloor);
+      if (held) usedSuggestions.add(held.unitId);
       if (pick) usedSuggestions.add(pick.unitId);
       return {
         key: `${line.id}-${i}`, lineId: line.id, roomTypeId: line.roomTypeId, roomTypeName: line.roomType.name,
-        units, suggestedId: pick?.unitId ?? null, suggestReason: pick?.reason ?? null,
+        units, suggestedId: held?.unitId ?? pick?.unitId ?? null, suggestReason: pick?.reason ?? null,
+        heldLabel: held?.unit.label ?? null,
       };
     }),
   );
@@ -77,7 +94,7 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
       ) : alreadyIn ? (
         <Card className="p-6 text-center">
           <p className="text-[14px] font-semibold text-ink-900">{s.checkin.alreadyTitle}</p>
-          <p className="mt-1 text-[12.5px] text-ink-500">{s.checkin.alreadyBody(r.assignments.map((a) => a.unit.label).join(", "))}</p>
+          <p className="mt-1 text-[12.5px] text-ink-500">{s.checkin.alreadyBody(arrived.map((a) => a.unit.label).join(", "))}</p>
           <Link href="/dashboard" className="mt-3 inline-block rounded-md bg-brand-800 px-3 py-2 text-[12.5px] font-semibold text-white hover:bg-brand-700">{s.checkin.backToDeskButton}</Link>
         </Card>
       ) : (
@@ -98,6 +115,11 @@ export default async function CheckinPage({ params, searchParams }: { params: Pr
                     <DoorOpen className="h-4 w-4 text-accent-500" />
                     {s.checkin.roomSlot(slots.length > 1 ? idx + 1 : "")} · {slot.roomTypeName}
                     <span className="text-[11px] font-medium text-ink-400">{s.checkin.free(free.length)}</span>
+                    {slot.heldLabel && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10.5px] font-semibold text-brand-700">
+                        <KeyRound className="h-3 w-3" /> {s.checkin.preassigned(slot.heldLabel)}
+                      </span>
+                    )}
                     {slot.suggestReason && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-accent-50 px-2 py-0.5 text-[10.5px] font-semibold text-accent-700">
                         <Wand2 className="h-3 w-3" /> {s.checkin.suggested(s.checkin.reasons[slot.suggestReason] ?? slot.suggestReason)}

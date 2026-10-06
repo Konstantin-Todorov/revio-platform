@@ -6,6 +6,7 @@ export interface ReservationStrings {
   states: { booked: string; assigned: string; in_house: string; departed: string; cancelled: string };
   dueOutToday: string;
   sharedRecord: string;
+  linked: { title: string; line: (from: string, to: string, channel: boolean) => string; open: string };
   registerKept: string;
   occupancyError: string;
   commercial: string;
@@ -61,6 +62,11 @@ export const reservation: Translations<ReservationStrings> = {
     subtitle: (types, from, to, nights) => `${types} · ${from} → ${to} · ${nights}`,
     states: { booked: "Booked — not arrived", assigned: "Room assigned", in_house: "In house", departed: "Departed", cancelled: "Cancelled" },
     dueOutToday: "Due out today",
+    linked: {
+      title: "Same guest, same room — a linked stay",
+      line: (from, to, channel) => `${from} → ${to}${channel ? " · booked through the channel" : " · extra nights, paid at the hotel"}`,
+      open: "Open",
+    },
     sharedRecord: "One shared record, two phases — the commercial fields below were written by RevioCRS / the channel at booking; the PMS extends the same record operationally. It is never a synced copy.",
     registerKept: "That register entry has details in it and can’t be removed — the register has to be kept for two years. Correct it instead.",
     occupancyError: "That guest count doesn’t fit the room. A room that sleeps two can’t be sold to three — move the stay to a larger room type first.",
@@ -114,6 +120,11 @@ export const reservation: Translations<ReservationStrings> = {
     subtitle: (types, from, to, nights) => `${types} · ${from} → ${to} · ${nights}`,
     states: { booked: "Резервирана — не е пристигнал", assigned: "Дадена е стая", in_house: "В хотела", departed: "Напуснал", cancelled: "Анулирана" },
     dueOutToday: "Напуска днес",
+    linked: {
+      title: "Същият гост, същата стая — свързан престой",
+      line: (from, to, channel) => `${from} → ${to}${channel ? " · резервиран през канала" : " · допълнителни нощувки, платими в хотела"}`,
+      open: "Отвори",
+    },
     sharedRecord: "Един общ запис в две фази — търговските полета по-долу са записани от RevioCRS или канала при резервацията, а PMS допълва същия запис с оперативните данни. Никога не е синхронизирано копие.",
     registerKept: "Този запис в регистъра съдържа данни и не може да бъде изтрит — регистърът се пази две години. Коригирайте го вместо това.",
     occupancyError: "Този брой гости не се побира в стаята. Стая за двама не може да се продаде на трима — първо преместете престоя в по-голям тип стая.",
