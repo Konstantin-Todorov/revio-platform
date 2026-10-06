@@ -379,8 +379,15 @@ says who can move it. Details sit where the link points.
 
 **Check — each is a question nobody has answered yet**
 
-- **A switched-off plan's frozen rate at Channex** — is it still bookable on the OTA? One sandbox booking
-  against a switched-off plan settles it. `HANDOFF` §4.
+- ~~**A switched-off plan's frozen rate at Channex**~~ ✅ **2026-10-06** — yes, it stayed open: the push
+  skipped a switched-off plan, so Channex kept its last price and `stop_sell: false`, and a room whose
+  every plan was off stopped receiving availability at all (a frozen room count, so an oversell). Each
+  push now CLOSES a switched-off plan's mapped pairs — stop-sell only, no price, no room count, never a
+  channel rate an active plan also uses (`switchedOffClosures`, `packages/connectivity/src/rate-mapping.ts`).
+  Proven in the Channex sandbox (`scripts/switched-off-sandbox.ts`): open → closed → reopened, the
+  other rate of the same room and the room's availability untouched. Production read the same day: no
+  switched-off plan is still mapped, and Cabacum's channel-derived "BookingCom" rates inherit stop-sell
+  and rate from our mapped parents — nothing open outside Revio's control.
 - **Scale** — seed 50 and 200 properties and time the cron tick against its interval. `HANDOFF` §6.
 - **Multi-property and time zones** — a report that sums properties in two zones; the property switcher
   across every screen. `HANDOFF` §7.

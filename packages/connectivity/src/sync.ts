@@ -17,7 +17,7 @@ import { createChannelAdapter, type AdapterMode } from "./factory.js";
 import { activateChannexChannel, channexApiConfig, deactivateChannexChannel } from "./channex-channel-api.js";
 import { sendEmail, publicBaseUrl } from "@revio/email";
 import { decidePull, type Stay } from "./pull-merge.js";
-import { indexRateMappings, resolveExternalRateId, stopSellPairs } from "./rate-mapping.js";
+import { indexRateMappings, resolveExternalRateId, stopSellPairs, switchedOffClosures } from "./rate-mapping.js";
 import {
   comparePublished, compareRestrictions, summarisePublished,
   type ExpectedRate, type ExpectedRestrictions, type PublishedComparison, type PublishedRestrictions, type PublishedSummary, type RestrictionFinding,
@@ -267,7 +267,7 @@ export async function syncChannel(
   // narrowed to what the edit actually touched.
   const scope = opts?.scope;
   const wants = (f: PushField) => (scope?.fields ?? ALL_PUSH_FIELDS).includes(f);
-  const [allRoomMaps, allRateMaps] = await Promise.all([
+  const [allRoomMaps, allRateMaps, switchedOffMaps] = await Promise.all([
     prisma.channelRoomTypeMapping.findMany({ where: { channelId, status: "complete", externalRoomId: { not: null } }, include: { roomType: true } }),
     prisma.channelRatePlanMapping.findMany({
       /*
@@ -293,6 +293,12 @@ export async function syncChannel(
       // occupancyOptions decides the shape of the push: their presence on a per-person plan is
       // what turns a scalar `rate` into a `rates[]` array.
       include: { ratePlan: { include: { occupancyOptions: true } } },
+    }),
+    // The other half of the rule above: a switched-off plan's mappings, so its pairs can be CLOSED
+    // at the channel rather than left frozen there, open, at the last price (`switchedOffClosures`).
+    prisma.channelRatePlanMapping.findMany({
+      where: { channelId, status: "complete", externalRateId: { not: null }, ratePlan: { active: false } },
+      select: { ratePlanId: true, roomTypeId: true, externalRateId: true },
     }),
   ]);
   // Present-but-empty is not the same as absent. Absent means "the caller did not narrow this axis";
@@ -670,6 +676,24 @@ export async function syncChannel(
           restrictions: {},
           bookable,
         });
+      }
+    }
+  }
+
+  /*
+   * Switched-off plans: closed, on every date this push covers — stop-sell only, no price and no
+   * room count, so nothing about a live plan or the room's availability is asserted through them.
+   * Re-sent on every push, which is what makes it safe: a plan switched off yesterday is closed by
+   * today's first push, and one switched back on is reopened by its own normal push.
+   */
+  if (wants("stopSell")) {
+    const rooms = new Set(roomMaps.map((m) => m.roomTypeId));
+    const offMaps = scope?.ratePlanIds ? switchedOffMaps.filter((m) => scope.ratePlanIds!.includes(m.ratePlanId)) : switchedOffMaps;
+    for (const c of switchedOffClosures(allRoomMaps, offMaps, allRateMaps)) {
+      if (!rooms.has(c.roomTypeId)) continue;
+      for (const k of dateKeys) {
+        if (!inScope(c.roomTypeId, c.ratePlanId, k)) continue;
+        updates.push({ externalRoomId: c.externalRoomId, externalRateId: c.externalRateId, date: k, currency: property.baseCurrency, restrictions: { stopSell: true } });
       }
     }
   }

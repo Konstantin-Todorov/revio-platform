@@ -145,3 +145,39 @@ export function stopSellPairs(
   }
   return out;
 }
+
+/**
+ * The (room, channel rate) pairs a SWITCHED-OFF plan still occupies at the channel — to be closed.
+ *
+ * The ARI push skips a plan the hotel has switched off, which is right for prices: a plan Revio no
+ * longer sells must not be advertised. But "skip" left whatever the channel last received frozen
+ * there, OPEN, at the last price — and Channex keeps ARI until it is told otherwise, so an OTA went
+ * on selling a rate nobody in the hotel thought was for sale. Worse, a room whose every plan was
+ * switched off stopped receiving availability at all, so its last room count froze too and the
+ * channel could sell a room already taken. Each push now closes these pairs (stop-sell, no price,
+ * no room count); switching the plan back on reopens it, because its normal push states `stopSell`.
+ *
+ * ⚠️ Never a rate an ACTIVE mapping also points at. A stale mapping often aims at another room's
+ * channel rate (Cabacum, 17 September), and closing that would stop a plan the hotel is selling.
+ * Room-specific rows only: a property-wide row cannot say which room its rate belongs to.
+ */
+export function switchedOffClosures(
+  roomMaps: readonly { roomTypeId: string; externalRoomId: string | null }[],
+  switchedOff: readonly RatePlanMappingRow[],
+  live: readonly RatePlanMappingRow[],
+): { roomTypeId: string; ratePlanId: string; externalRoomId: string; externalRateId: string }[] {
+  const liveRates = new Set(live.map((m) => m.externalRateId).filter((id): id is string => Boolean(id)));
+  const roomOf = new Map(roomMaps.filter((r) => r.externalRoomId).map((r) => [r.roomTypeId, r.externalRoomId!] as const));
+  const seen = new Set<string>();
+  const out: { roomTypeId: string; ratePlanId: string; externalRoomId: string; externalRateId: string }[] = [];
+  for (const m of switchedOff) {
+    if (!m.roomTypeId || !m.externalRateId || liveRates.has(m.externalRateId)) continue;
+    const externalRoomId = roomOf.get(m.roomTypeId);
+    if (!externalRoomId) continue;
+    const key = `${externalRoomId}|${m.externalRateId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ roomTypeId: m.roomTypeId, ratePlanId: m.ratePlanId, externalRoomId, externalRateId: m.externalRateId });
+  }
+  return out;
+}

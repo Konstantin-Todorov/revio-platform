@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { indexRateMappings, resolveExternalRateId, stopSellPairs, unmappedPairs } from "./rate-mapping.js";
+import { indexRateMappings, resolveExternalRateId, stopSellPairs, switchedOffClosures, unmappedPairs } from "./rate-mapping.js";
 
 /**
  * The bug this replaces: a hotel with three room types and ONE "Standard Rate" mapped that plan to a
@@ -155,3 +155,23 @@ describe("stopSellPairs", () => {
   });
 });
 
+
+describe("switchedOffClosures — a plan switched off in Revio is closed at the channel", () => {
+  const rooms = [{ roomTypeId: "r1", externalRoomId: "X1" }, { roomTypeId: "r2", externalRoomId: "X2" }];
+  const live = [{ ratePlanId: "flex", roomTypeId: "r1", externalRateId: "FLEX1" }, { ratePlanId: "flex", roomTypeId: "r2", externalRateId: "FLEX2" }];
+
+  it("closes each switched-off plan on its own room", () => {
+    const off = [{ ratePlanId: "std", roomTypeId: "r1", externalRateId: "STD1" }, { ratePlanId: "std", roomTypeId: "r2", externalRateId: "STD2" }];
+    expect(switchedOffClosures(rooms, off, live).map((p) => `${p.externalRoomId}|${p.externalRateId}`)).toEqual(["X1|STD1", "X2|STD2"]);
+  });
+
+  it("⚠️ never closes a channel rate an active plan is selling through — the Cabacum stale mapping", () => {
+    const off = [{ ratePlanId: "std", roomTypeId: "r1", externalRateId: "FLEX2" }];
+    expect(switchedOffClosures(rooms, off, live)).toEqual([]);
+  });
+
+  it("ignores a property-wide row and a room that is not mapped", () => {
+    const off = [{ ratePlanId: "std", roomTypeId: null, externalRateId: "STD" }, { ratePlanId: "std", roomTypeId: "r9", externalRateId: "STD9" }];
+    expect(switchedOffClosures(rooms, off, live)).toEqual([]);
+  });
+});
