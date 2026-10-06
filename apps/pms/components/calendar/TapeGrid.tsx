@@ -176,7 +176,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
   }
 
   return (
-    <div className={`overflow-x-auto transition-opacity ${pending || busy ? "pointer-events-none opacity-60" : ""}`}>
+    <div className={`overflow-x-auto transition-opacity ${pending || busy ? "pointer-events-none opacity-60" : ""} ${stretch ? "select-none" : ""}`}>
       <div style={{ minWidth: labelCol + span * col }}>
         <div className="grid border-b border-surface-border bg-surface-muted" style={{ gridTemplateColumns: gridCols }}>
           <div className="px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">{t.room}</div>
@@ -299,7 +299,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
                           }}
                           onDragEnd={() => { draggedAt.current = Date.now(); setDragging(null); setOver(null); }}
                           title={`${bar.guestName}${bar.occupancy != null ? ` · ${count(bar.occupancy, t.guestOne, t.guestMany)}` : ""} · ${bar.from} → ${bar.to} · ${t.bars[bar.status]}${bar.pinned ? ` · ${t.pinned}` : ""}${bar.movable ? ` · ${t.dragToMove}` : ""}`}
-                          className={`absolute inset-y-1 flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] font-semibold shadow-sm transition-all duration-150 hover:opacity-90 hover:shadow-md ${BAR_TONE[bar.status]} ${
+                          className={`absolute inset-y-1 flex items-center gap-1 overflow-hidden rounded px-1.5 text-[11px] font-semibold shadow-sm transition-[opacity,box-shadow] duration-150 hover:opacity-90 hover:shadow-md ${BAR_TONE[bar.status]} ${
                             bar.continuesLeft ? "rounded-l-none" : ""
                           } ${bar.continuesRight ? "rounded-r-none" : ""} ${bar.movable ? "cursor-grab active:cursor-grabbing" : ""} ${
                             dragging?.assignmentId === bar.assignmentId ? "opacity-40" : ""
@@ -467,7 +467,7 @@ export function TapeGrid({ rows, dates, tapeDays, col, labelCol, returnTo, moveA
       {/* An ordinary move says so and gets out of the way. Silence after a drag leaves the user
           wondering whether it worked; a dialog for something routine is worse. */}
       {toast && (
-        <div className="pointer-events-none fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-md bg-ink-900 px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-lg">
+        <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-6 left-1/2 z-40 -translate-x-1/2 rounded-md bg-ink-900 px-3.5 py-2 text-[12.5px] font-semibold text-white shadow-lg">
           {toast}
         </div>
       )}

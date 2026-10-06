@@ -5,6 +5,7 @@ import { forSystem } from "@revio/db";
 import { getCompany } from "@/lib/invoice-doc";
 import { invoiceDocData } from "@/lib/invoice-data";
 import { invoiceBodyHtml, INVOICE_DOC_CSS } from "@/lib/invoice-html";
+import { withDraftLines } from "@/lib/invoice-run";
 import { PrintButton } from "@/components/billing/PrintButton";
 import { PaymentLinkCard } from "@/components/billing/PaymentLinkCard";
 
@@ -36,7 +37,8 @@ export default async function InvoicePage({ params }: { params: Promise<{ id: st
     prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
   ]);
   const company = invoice.number ? null : await getCompany();
-  const data = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company, billing });
+  // A draft is shown with the lines issuing will write — see `withDraftLines`.
+  const data = invoiceDocData(await withDraftLines(invoice), { tenantName: tenant?.name ?? null, company, billing });
 
   return (
     <div className="mx-auto max-w-[860px]">

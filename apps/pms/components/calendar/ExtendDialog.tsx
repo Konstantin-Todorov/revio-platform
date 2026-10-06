@@ -184,7 +184,9 @@ export function ExtendDialog({ bar, initialCheckOut, quoteAction, extendAction, 
               <span className="text-[12px] font-semibold text-ink-700">{t.total}</span>
               <div className="mt-1 flex items-center gap-2">
                 <input
+                  name="extensionTotal"
                   inputMode="decimal"
+                  autoComplete="off"
                   value={total}
                   onChange={(e) => { edited.current = true; setTotal(e.target.value); }}
                   className={`h-10 w-32 min-w-0 rounded-md border px-2.5 text-right text-[14px] font-bold tnum text-ink-900 ${

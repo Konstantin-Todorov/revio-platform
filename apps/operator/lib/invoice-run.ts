@@ -248,3 +248,19 @@ export async function runInvoiceGeneration(): Promise<{ period: string; created:
   }
   return { period, created, refreshed };
 }
+
+/**
+ * The invoice as a document, with a DRAFT carrying the lines issuing will write.
+ *
+ * ⚠️ A draft has no snapshot and used to be rendered from its `lineItems` summary — "starter ·
+ * RevioLink, RevioCRS, RevioPMS · bundle −20%", English, one line — while issuing snapshots the
+ * Bulgarian breakdown (platform fee, each module, the discount). The preview and the download showed
+ * a different document from the one the customer would get. Issued invoices are returned untouched.
+ */
+export async function withDraftLines<T extends { number: string | null; lineSnapshot: unknown; tenantId: string; period: string }>(invoice: T): Promise<T> {
+  if (invoice.number || Array.isArray(invoice.lineSnapshot)) return invoice;
+  const t = await prisma.tenant.findUnique({ where: { id: invoice.tenantId } });
+  if (!t) return invoice;
+  const { lines } = await billingFor(t, invoice.period, "bg");
+  return { ...invoice, lineSnapshot: lines };
+}

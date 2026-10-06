@@ -2,6 +2,7 @@ import { forSystem } from "@revio/db";
 import { getOperatorSession } from "@/lib/session";
 import { getCompany } from "@/lib/invoice-doc";
 import { invoiceDocData } from "@/lib/invoice-data";
+import { withDraftLines } from "@/lib/invoice-run";
 import { invoiceFileHtml, invoiceFileName } from "@/lib/invoice-html";
 
 /**
@@ -25,7 +26,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const company = invoice.number ? null : await getCompany();
   const billing = await prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } });
 
-  const data = invoiceDocData(invoice, { tenantName: tenant?.name ?? null, company, billing });
+  const data = invoiceDocData(await withDraftLines(invoice), { tenantName: tenant?.name ?? null, company, billing });
 
   return new Response(invoiceFileHtml(data), {
     headers: {
