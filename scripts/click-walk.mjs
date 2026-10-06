@@ -29,6 +29,7 @@
  *
  *     pnpm click-walk                 # every app that is running
  *     pnpm click-walk --app pms
+ *     WALK_PROPERTY=<id> pnpm click-walk   # one property of the account
  *
  * Start the app first. An app that is not listening is reported as SKIPPED, never as passing.
  */
@@ -292,7 +293,14 @@ try {
     if (!token) { skipped.push(cfg.label); out.push(`  ${cfg.label.padEnd(11)} SKIPPED — no seeded account or AUTH_SECRET`); continue; }
 
     const ctx = await browser.newContext();
-    await ctx.addCookies([{ name: cfg.cookie, value: token, domain: "localhost", path: "/" }]);
+    await ctx.addCookies([
+      { name: cfg.cookie, value: token, domain: "localhost", path: "/" },
+      // The same as route-walk: walk one property of the account, e.g. when another is mid-setup and
+      // its dashboard rightly sends the walk to first-run instead.
+      ...(process.env.WALK_PROPERTY && !cfg.operator
+        ? [{ name: "revio_property", value: process.env.WALK_PROPERTY, domain: "localhost", path: "/" }]
+        : []),
+    ]);
     const page = await ctx.newPage();
 
     const consoleErrors = [];

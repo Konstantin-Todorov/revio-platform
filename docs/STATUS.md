@@ -467,6 +467,13 @@ says who can move it. Details sit where the link points.
   6 октомври 2026 г. · Банков превод · <ref>" — it had read "06 Oct 2026 · Bank transfer").
 - ~~**Extensions were invisible on the reservation**~~ ✅ **2026-10-06** — the timeline shows "Престоят е
   удължен до пт, 10 окт. · +2 нощувки" from the extension's audit row.
+- ~~**After-change sweep, 2026-10-07**~~ ✅ — `phone-walk` at 375px: RevioLink 112, RevioCRS 173,
+  RevioPMS 184, Operator 136, RevioDirect 9 screens and menus, nothing off the edge (one PMS flag on
+  `/settings` did not reproduce by hand or on a re-run — a mid-redirect frame). `click-walk`: ⌘K,
+  one read and "mark all read" pass in all four apps. RevioLink's dashboard correctly sends a property
+  that never finished setup to first-run, which aborted the walk on the local test property —
+  `click-walk` now takes `WALK_PROPERTY` like `route-walk`. Running all five dev servers beside
+  `pnpm verify` exhausts local Postgres connections; walk apps one at a time.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,
