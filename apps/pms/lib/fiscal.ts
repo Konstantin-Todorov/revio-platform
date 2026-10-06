@@ -1,7 +1,7 @@
 import "server-only";
 import {
-  buildFiscalReceipt, defaultFiscalTaxGroups, fiscalRequirement, FISCAL_TAX_GROUPS,
-  type FiscalReceipt, type FiscalTaxGroupMap, type PaymentMethod,
+  defaultFiscalTaxGroups, fiscalRequirement, FISCAL_TAX_GROUPS,
+  type FiscalTaxGroupMap, type PaymentMethod,
 } from "@revio/core";
 
 /**
@@ -138,24 +138,4 @@ export function fiscalGroupsFor(d: { fiscalTaxGroups?: unknown; invoiceVatId?: s
     city_tax: ok(stored.city_tax) ? stored.city_tax : base.city_tax,
     exempt: ok(stored.exempt) ? stored.exempt : base.exempt,
   };
-}
-
-/** Charge kinds whose lines a receipt is scaled against — everything that is not money moving. */
-const CHARGE_KINDS = new Set(["accommodation", "minibar", "extra", "fee", "tax"]);
-
-/**
- * The receipt for one payment line, or null when that payment needs none (bank transfer, OTA…) or is
- * not a payment. Charges come from every folio of the stay, so a split folio still prints the stay's mix.
- */
-export function receiptForPayment(
-  payment: { kind: string; method: string | null; amountMinor: number; voided: boolean },
-  stayLines: { kind: string; amountMinor: number; taxCategory: string | null; outlet: string | null; voided: boolean }[],
-  jurisdiction: string,
-  groups: FiscalTaxGroupMap,
-): FiscalReceipt | null {
-  if (payment.kind !== "payment" || payment.voided || payment.amountMinor <= 0) return null;
-  if (payment.method !== "cash" && payment.method !== "card") return null;
-  if (!fiscalRequirement(jurisdiction, payment.method)?.required) return null;
-  const charges = stayLines.filter((l) => !l.voided && CHARGE_KINDS.has(l.kind));
-  return buildFiscalReceipt({ amountMinor: payment.amountMinor, method: payment.method, charges, groups });
 }

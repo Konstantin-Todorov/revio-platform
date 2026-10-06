@@ -5,9 +5,9 @@ import { prisma } from "./db";
 import { activeProperty } from "./data";
 import { postFolioLineWith } from "./posting";
 import { MANAGER_ROLES } from "./roles";
-import { fiscalGroupsFor, receiptForPayment } from "./fiscal";
+import { fiscalGroupsFor } from "./fiscal";
+import { fiscalPlan, type StornoOriginal } from "./fiscal-plan";
 import type { FiscalReceipt } from "@revio/core";
-import type { StornoOriginal } from "@/components/fiscal/FiscalReceiptRow";
 import { ymd, todayInTz, hmInTz } from "./format";
 import type { HkStatus } from "./hk-meta";
 import { summariseOutcomes, outcomeHeadline, type OutcomeTotal } from "./folio-outcomes";
@@ -302,26 +302,23 @@ export async function getFolioView(reservationId: string) {
   const groups = fiscalGroupsFor(defaults);
   const stayLines = folios.flatMap((f) => f.lines);
   const now = Date.now();
-  type StornoView = { done: { no: string; source: string | null } | null; original: StornoOriginal | null };
+  type StornoView = { done: { no: string; source: string | null } | null; original: StornoOriginal | null; reasonFixed: boolean };
   const fiscal = new Map<string, { receipt: FiscalReceipt | null; recorded: { no: string; source: string | null } | null; autoPrint: boolean; storno: StornoView | null }>();
   if (fiscalOn) {
+    // What each line owes the device is decided in one pure place — `fiscal-plan.ts` and its tests.
+    const plan = fiscalPlan(stayLines, defaults!.jurisdiction, groups);
     for (const l of stayLines) {
-      if (l.kind !== "payment") continue;
-      // A voided payment that had a receipt owes a storno: the void fixed our record, not the device's.
-      if (l.voided) {
-        if (!l.fiscalReceiptNo) continue;
-        const d = l.fiscalReceiptData as StornoOriginal | null;
+      const owes = plan.get(l.id);
+      if (owes?.owes === "storno") {
         fiscal.set(l.id, {
           receipt: null, recorded: null, autoPrint: false,
-          storno: {
-            done: l.fiscalStornoNo ? { no: l.fiscalStornoNo, source: l.fiscalStornoSource } : null,
-            original: d && Array.isArray(d.items) && d.items.length ? d : null,
-          },
+          storno: { done: l.fiscalStornoNo ? { no: l.fiscalStornoNo, source: l.fiscalStornoSource } : null, original: owes.original, reasonFixed: owes.reasonFixed },
         });
         continue;
       }
-      const recorded = l.fiscalReceiptNo ? { no: l.fiscalReceiptNo, source: l.fiscalSource } : null;
-      const receipt = recorded ? null : receiptForPayment(l, stayLines, defaults!.jurisdiction, groups);
+      // A receipt already on the line is shown whether or not anything is owed now.
+      const recorded = !l.voided && l.fiscalReceiptNo ? { no: l.fiscalReceiptNo, source: l.fiscalSource } : null;
+      const receipt = owes?.owes === "receipt" ? owes.receipt : null;
       if (!recorded && !receipt) continue;
       // Print by itself only for the person who just took the money, in the minute they took it.
       const autoPrint = !recorded && l.postedById === session.userId && now - l.postedAt.getTime() < 120_000;

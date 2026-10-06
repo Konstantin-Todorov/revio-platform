@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allocateExactly, buildFiscalReceipt, defaultFiscalTaxGroups, taxGroupNumber } from "./receipt";
+import { allocateExactly, buildFiscalReceipt, defaultFiscalTaxGroups, scaleFiscalItems, taxGroupNumber } from "./receipt";
 
 const VAT = defaultFiscalTaxGroups(true);
 const room = (amountMinor: number) => ({ amountMinor, taxCategory: "reduced", outlet: "room" });
@@ -75,5 +75,34 @@ describe("buildFiscalReceipt", () => {
   it("labels fit the narrowest common device line (Datecs DP-25: 22 characters)", () => {
     const r = buildFiscalReceipt({ amountMinor: 3000, method: "cash", charges: [room(1), bar(1), cityTax(1), { amountMinor: 1, taxCategory: "standard", outlet: "spa" }, { amountMinor: 1, taxCategory: "standard", outlet: "other" }], groups: VAT });
     for (const i of r.items) expect(i.text.length).toBeLessThanOrEqual(22);
+  });
+});
+
+describe("scaleFiscalItems — a partial storno mirrors the receipt it reverses", () => {
+  const original = [
+    { text: "Нощувки", taxGroup: 4, amountMinor: 7001 },
+    { text: "Храна и напитки", taxGroup: 2, amountMinor: 2333 },
+    { text: "Туристически данък", taxGroup: 1, amountMinor: 666 },
+  ];
+
+  it("keeps every text and tax group and adds up to the refund exactly", () => {
+    for (const amount of [1, 999, 3000, 3333, 9999]) {
+      const s = scaleFiscalItems(original, amount);
+      expect(s.reduce((a, i) => a + i.amountMinor, 0)).toBe(amount);
+      for (const i of s) expect(original.some((o) => o.text === i.text && o.taxGroup === i.taxGroup)).toBe(true);
+    }
+  });
+
+  it("the full amount is the original, line for line", () => {
+    expect(scaleFiscalItems(original, 10000)).toEqual(original);
+  });
+
+  it("never reverses more than was sold", () => {
+    expect(scaleFiscalItems(original, 25000)).toEqual(original);
+  });
+
+  it("drops a line that scales to zero, and returns nothing for nothing", () => {
+    expect(scaleFiscalItems(original, 1).length).toBe(1);
+    expect(scaleFiscalItems(original, 0)).toEqual([]);
   });
 });

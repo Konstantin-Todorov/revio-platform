@@ -13,8 +13,8 @@ import { SubmitButton } from "@revio/ui/submit-button";
  * The browser is the only thing that reaches both us and the printer on the desk, so this component —
  * not our server — talks to ErpNet.FP and hands the device's answer back. A payment shows one of:
  *   „Касов бон № …“ · „Бонът не е отпечатан — …“ · nothing (no receipt required).
- * A VOIDED payment that had a receipt shows its storno instead: done, or still owed — because voiding
- * corrects our record and only a storno corrects the device's.
+ * A VOIDED line that had a receipt, or a refund of a receipted deposit, shows its storno instead: done,
+ * or still owed — because our record is corrected already and only a storno corrects the device's.
  */
 export type FiscalReceiptPayload = {
   items: { text: string; taxGroup: number; amountMinor: number }[];
@@ -22,13 +22,8 @@ export type FiscalReceiptPayload = {
   totalMinor: number;
 };
 
-export type StornoOriginal = {
-  items: { text: string; taxGroup: number; amountMinor: number }[];
-  paymentType: "cash" | "card";
-  receiptNumber: string;
-  receiptDateTime: string | null;
-  fiscalMemorySerialNumber: string | null;
-};
+export type { StornoOriginal } from "@/lib/fiscal-plan";
+import type { StornoOriginal } from "@/lib/fiscal-plan";
 
 /** Plain strings — these cross from the server to the browser, so no functions; `{n}` / `{m}` are filled here. */
 export type FiscalRowStrings = {
@@ -47,6 +42,7 @@ export type FiscalRowStrings = {
   manualSave: string;
   orTypeIt: string;
   stornoNeeded: string;
+  stornoRefundNeeded: string;
   stornoReason: string;
   reasonOperator: string;
   reasonRefund: string;
@@ -61,15 +57,17 @@ export function FiscalReceiptRow({ lineId, receipt, recorded, storno, device, au
   lineId: string;
   receipt: FiscalReceiptPayload | null;
   recorded: { no: string; source: string | null } | null;
-  /** Present only for a voided payment that had a receipt. */
-  storno: { done: { no: string; source: string | null } | null; original: StornoOriginal | null } | null;
+  /** Present only for a line that owes the device a storno: a voided receipted line, or a refund of a receipted deposit. */
+  storno: { done: { no: string; source: string | null } | null; original: StornoOriginal | null; reasonFixed: boolean } | null;
   device: "none" | "erpnet";
   autoPrint: boolean;
   s: FiscalRowStrings;
 }) {
   const [state, setState] = useState<State>({ k: "idle" });
   const [done, setDone] = useState<string | null>(null);
-  const [reason, setReason] = useState<"operator_error" | "refund">("operator_error");
+  const [picked, setReason] = useState<"operator_error" | "refund">("operator_error");
+  // A deposit going back to the guest is a refund by definition — nothing to choose.
+  const reason = storno?.reasonFixed ? "refund" : picked;
   const started = useRef(false);
   const key = storno ? `storno-${lineId}` : lineId;
 
@@ -149,16 +147,16 @@ export function FiscalReceiptRow({ lineId, receipt, recorded, storno, device, au
         ) : (
           <>
             <span className="inline-flex items-start gap-1.5 font-semibold text-warning-700">
-              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" /> {state.k === "error" ? state.msg : s.stornoNeeded}
+              <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0" /> {state.k === "error" ? state.msg : storno.reasonFixed ? s.stornoRefundNeeded : s.stornoNeeded}
             </span>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              <label className="flex items-center gap-1.5 text-ink-600">
+              {!storno.reasonFixed && <label className="flex items-center gap-1.5 text-ink-600">
                 {s.stornoReason}
                 <select value={reason} onChange={(e) => setReason(e.target.value as typeof reason)} className="h-7 rounded border border-surface-border bg-white px-1.5 text-[11.5px]">
                   <option value="operator_error">{s.reasonOperator}</option>
                   <option value="refund">{s.reasonRefund}</option>
                 </select>
-              </label>
+              </label>}
               {device === "erpnet" && storno.original && (
                 <button type="button" onClick={() => void print()} className="inline-flex items-center gap-1 rounded-md border border-accent-500 bg-white px-2 py-1 text-[11.5px] font-semibold text-accent-600 hover:bg-accent-50">
                   <Printer className="h-3.5 w-3.5" /> {s.printStorno}

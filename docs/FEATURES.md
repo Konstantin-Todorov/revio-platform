@@ -107,6 +107,11 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
   the hotel does not register it with НАП and its restaurant or spa till is untouched. Hotels that
   keep printing on their own till type the receipt number in instead. *`core/fiscal/receipt.ts`,
   `apps/pms/components/fiscal/`; guide reviosoft.app/guides/fiscal-printer.* Live 2026-10-05.
+  **Deposits follow the deposit type's VAT point**: an advance (VAT at capture) is receipted when the
+  money is taken, and returning part of it asks for a **partial storno** that reverses each line of
+  the original receipt in proportion; a security deposit (VAT at use) prints nothing when taken and
+  is receipted when applied to the bill, in the method it was taken in. *`apps/pms/lib/fiscal-plan.ts`,
+  12 tests.* Built 2026-10-06.
 
 ## 6. RevioDirect — the hotel's own booking page
 

@@ -51,3 +51,24 @@ printer is out of paper — the device is still the system of record either way.
 3. **Folio** — print on payment, status on the row, reprint, manual entry.
 4. **Refunds and the day** — reversal receipt (сторно) on a refund; Z-report from Close Day.
 5. **Hotel guide** — a one-page Bulgarian install guide for ErpNet.FP; a fake printer for demos.
+
+## Deposits and partial refunds (2026-10-06)
+
+The receipt prints when money becomes payment for a stay, and a deposit type already says when that
+is: `DepositType.vatTiming`, set by the hotel's accountant.
+
+| Deposit | When taken | When applied to the bill | When (part) returned |
+| --- | --- | --- | --- |
+| **Advance** — VAT at capture | receipt, in the method taken | nothing (already receipted) | **partial storno** of that receipt |
+| **Security** — VAT at use | nothing — not a sale | receipt, in the method it was taken in | nothing (nothing was receipted) |
+| Taken by bank transfer | nothing | nothing | nothing |
+
+A partial storno reverses each line of the original receipt in proportion (`scaleFiscalItems`,
+largest remainder), referencing the original's number, date and fiscal-memory serial — so a €30
+refund of a €100 advance reverses €29.64 of „Нощувки“ and €0.36 of tourist tax, not "€30 of
+something". Voiding a deposit after part of it was refunded reverses only what is left: the device
+never takes back more than it sold. All rules live in one pure function, `apps/pms/lib/fiscal-plan.ts`.
+
+Known edge: when one folio holds several deposits, a refund or an application is matched to the
+**latest** held deposit before it. Deposits of both kinds on one folio, in different methods, are
+the case where that guess can be wrong; the receptionist can still type the number by hand.

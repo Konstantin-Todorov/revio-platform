@@ -31,7 +31,8 @@ async function save(session: Session, lineId: string, data: { no: string; atLoca
   const no = data.no.trim().slice(0, 40);
   if (!no) return { ok: false, reason: "invalid" };
   const line = await prisma.folioLine.findFirst({
-    where: { id: lineId, propertyId: session.activePropertyId, kind: "payment", voided: false },
+    // The kinds `fiscal-plan.ts` can ask a receipt for: a payment, or a deposit at its receipt point.
+    where: { id: lineId, propertyId: session.activePropertyId, kind: { in: ["payment", "deposit_held", "deposit_use"] }, voided: false },
     select: { id: true, amountMinor: true, fiscalReceiptNo: true, folio: { select: { reservationId: true } }, property: { select: { timezone: true } } },
   });
   if (!line) return { ok: false, reason: "not_found" };
@@ -77,20 +78,33 @@ export async function recordManualReceipt(fd: FormData): Promise<void> {
 }
 
 /**
- * The storno receipt for a VOIDED payment that had a fiscal receipt.
+ * The storno receipt for a VOIDED line that had a fiscal receipt, or for a deposit returned to the guest
+ * after its receipt was printed (a partial storno — `fiscal-plan.ts`).
  *
- * Voiding the line corrects our record; only a storno corrects the device's. Until one is recorded the
- * folio says so, because a void with no storno leaves the till's turnover higher than the money in it.
+ * Voiding or refunding corrects our record; only a storno corrects the device's. Until one is recorded
+ * the folio says so, because without it the till's turnover is higher than the money in it.
  */
 async function saveStorno(session: Session, lineId: string, data: { no: string; atLocal: string | null; reason: string; source: "printed" | "manual" }): Promise<SaveReceiptResult> {
   const no = data.no.trim().slice(0, 40);
   if (!no) return { ok: false, reason: "invalid" };
-  const reason = data.reason === "refund" ? "refund" : "operator_error";
   const line = await prisma.folioLine.findFirst({
-    where: { id: lineId, propertyId: session.activePropertyId, kind: "payment", voided: true, fiscalReceiptNo: { not: null } },
-    select: { id: true, fiscalStornoNo: true, folio: { select: { reservationId: true } }, property: { select: { timezone: true } } },
+    where: {
+      id: lineId, propertyId: session.activePropertyId,
+      OR: [
+        { kind: { in: ["payment", "deposit_held", "deposit_use"] }, voided: true, fiscalReceiptNo: { not: null } },
+        { kind: "deposit_refund", voided: false },
+      ],
+    },
+    select: { id: true, kind: true, folioId: true, postedAt: true, fiscalStornoNo: true, folio: { select: { reservationId: true } }, property: { select: { timezone: true } } },
   });
   if (!line) return { ok: false, reason: "not_found" };
+  // A refund owes a storno only when the deposit it returns was receipted — the rule `fiscal-plan.ts` shows.
+  if (line.kind === "deposit_refund") {
+    const receipted = await prisma.folioLine.count({ where: { folioId: line.folioId, kind: "deposit_held", voided: false, fiscalReceiptNo: { not: null }, postedAt: { lte: line.postedAt } } });
+    if (!receipted) return { ok: false, reason: "not_found" };
+  }
+  // Money handed back is a refund by definition; only a void can be an operator's mistake.
+  const reason = line.kind === "deposit_refund" || data.reason === "refund" ? "refund" : "operator_error";
   if (line.fiscalStornoNo) return { ok: false, reason: "already" };
   const r = await prisma.folioLine.updateMany({
     where: { id: lineId, fiscalStornoNo: null },

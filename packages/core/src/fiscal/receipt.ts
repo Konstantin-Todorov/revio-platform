@@ -141,3 +141,21 @@ export function buildFiscalReceipt(input: {
   if (totalMinor !== amountMinor) throw new Error(`Receipt lines (${totalMinor}) do not add up to the payment (${amountMinor}).`);
   return { items, paymentType: method, totalMinor };
 }
+
+/**
+ * The lines of a PARTIAL storno: the original receipt's lines scaled to the amount going back.
+ *
+ * A storno must mirror the receipt it reverses — same texts, same tax groups — so a €30 refund of a
+ * €100 deposit receipt reverses 30% of each line, never "€30 of whatever". Largest remainder again, so
+ * the storno adds up to the refund exactly; a line that scales to zero is dropped. The amount is capped
+ * at the original total: a storno can never reverse more than was sold.
+ */
+export function scaleFiscalItems(items: FiscalReceiptItem[], amountMinor: number): FiscalReceiptItem[] {
+  const total = items.reduce((a, i) => a + i.amountMinor, 0);
+  const target = Math.min(amountMinor, total);
+  if (!Number.isInteger(target) || target <= 0) return [];
+  if (target === total) return items.map((i) => ({ ...i }));
+  return allocateExactly(target, items.map((i) => i.amountMinor))
+    .map((amt, k) => ({ text: items[k]!.text, taxGroup: items[k]!.taxGroup, amountMinor: amt }))
+    .filter((i) => i.amountMinor > 0);
+}
