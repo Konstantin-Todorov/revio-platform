@@ -64,7 +64,9 @@ export default async function SettingsTaxesPage() {
           <div><label className={labelCls}>{t.pct}</label><input type="number" step="0.1" min="0" name="pct" placeholder="9" className={inputCls} /></div>
           <div>
             <label className={labelCls}>{t.basisLabel}</label>
-            <select name="basis" defaultValue="per_person" className={inputCls}>
+            {/* Tourist tax is the common fixed fee, and it is per person per night — so that is the default. */}
+            <select name="basis" defaultValue="per_person_night" className={inputCls}>
+              <option value="per_person_night">{cap(t.basis.per_person_night)}</option>
               <option value="per_room">{cap(t.basis.per_room)}</option><option value="per_person">{cap(t.basis.per_person)}</option>
               <option value="per_night">{cap(t.basis.per_night)}</option><option value="per_stay">{cap(t.basis.per_stay)}</option>
             </select>

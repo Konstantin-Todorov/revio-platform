@@ -81,7 +81,7 @@ export interface SettingsStrings {
   taxes: {
     title: string;
     cols: { name: string; amount: string; basis: string; inRate: string; status: string };
-    basis: Record<"per_room" | "per_person" | "per_night" | "per_stay", string>;
+    basis: Record<"per_room" | "per_person" | "per_person_night" | "per_night" | "per_stay", string>;
     inclusion: { included: string; excluded: string };
     active: string;
     off: string;
@@ -266,7 +266,7 @@ export const settings: Translations<SettingsStrings> = {
     taxes: {
       title: "Taxes & Fees",
       cols: { name: "Name", amount: "Amount", basis: "Basis", inRate: "In displayed rate?", status: "Status" },
-      basis: { per_room: "per room", per_person: "per person", per_night: "per night", per_stay: "per stay" },
+      basis: { per_room: "per room", per_person: "per person, once per stay", per_person_night: "per person per night", per_night: "per night", per_stay: "per stay" },
       inclusion: { included: "included", excluded: "excluded" },
       active: "active",
       off: "off",
@@ -451,7 +451,7 @@ export const settings: Translations<SettingsStrings> = {
     taxes: {
       title: "Данъци и такси",
       cols: { name: "Име", amount: "Сума", basis: "Основа", inRate: "В показаната цена?", status: "Статус" },
-      basis: { per_room: "на стая", per_person: "на човек", per_night: "на нощувка", per_stay: "на престой" },
+      basis: { per_room: "на стая", per_person: "на човек, веднъж за престоя", per_person_night: "на човек на нощувка", per_night: "на нощувка", per_stay: "на престой" },
       inclusion: { included: "включен", excluded: "невключен" },
       active: "активен",
       off: "изкл.",

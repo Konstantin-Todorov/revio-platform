@@ -16,7 +16,7 @@ export interface StayFee {
   type: string;
   pct?: number | null;
   amountMinor?: number | null;
-  /** per_room | per_person | per_night | per_stay */
+  /** per_room | per_person | per_person_night | per_night | per_stay */
   basis: string;
   /** "included" fees are already inside the rate and are never added on top. */
   inclusion?: string;
@@ -63,10 +63,17 @@ export function feeAmount(fee: StayFee, stay: StayShape): number {
     return fee.pct ? Math.round((stay.accommodationMinor * fee.pct) / 100) : 0;
   }
   const unit = fee.amountMinor ?? 0;
+  /*
+   * `per_person_night` is the tourist tax's own shape — ЗМДТ чл. 61р charges it for every night of
+   * every guest. It exists because `per_person` was the only person-based option, the first-run
+   * screen asked for the tax "per person per night", and the guest was then charged it once per
+   * stay: two guests for three nights paid 3.00 on a 1.50 rate and the hotel owed the council 9.00.
+   */
   const multiplier =
     fee.basis === "per_night" ? stay.nights
     : fee.basis === "per_room" ? stay.rooms
     : fee.basis === "per_person" ? stay.guests
+    : fee.basis === "per_person_night" ? stay.guests * stay.nights
     : 1; // per_stay
   return unit * multiplier;
 }

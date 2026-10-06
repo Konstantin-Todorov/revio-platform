@@ -5,6 +5,8 @@ import { forSystem } from "@revio/db";
 import { docMoney } from "@/lib/invoice-html";
 import { invoiceByPayToken, PAY_WORDS } from "@/lib/pay-page";
 import { activeStripeMode, readStripeSecret } from "@/lib/integrations";
+import { epcPayload } from "@/lib/epc-qr";
+import QRCode from "qrcode";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,13 @@ export default async function PayPage({ params, searchParams }: {
   // The card button only when a key for the active mode is stored — otherwise the bank route alone,
   // said plainly, rather than a button that bounces.
   const cardReady = (await readStripeSecret(mode)).state === "ready";
+  // The bank route as a QR the customer's banking app can read — only when every field is right.
+  const iban = invoice.issuerIban ?? company?.iban ?? null;
+  const epc = !paid && iban
+    ? // SEPA's character set is Latin: the registered Latin name where we have one, so a bank does not reject it.
+    epcPayload({ name: company?.legalNameLatin || invoice.issuerName || company?.legalName || "", iban, bic: invoice.issuerBic ?? company?.bic, amountMinor: owed, currency: invoice.currency, reference: invoice.number! })
+    : null;
+  const qr = epc ? await QRCode.toDataURL(epc, { errorCorrectionLevel: "M", margin: 1, width: 360 }) : null;
 
   return (
     <main lang={lang} className="min-h-screen bg-[#f4f5f7] px-4 py-10 text-[#1c2434]">
@@ -108,6 +117,13 @@ export default async function PayPage({ params, searchParams }: {
               {(invoice.issuerBic ?? company?.bic) && (<><dt className="text-[#8a94a6]">BIC</dt><dd className="font-mono">{invoice.issuerBic ?? company?.bic}</dd></>)}
               <dt className="text-[#8a94a6]">{w.reference}</dt><dd className="select-all font-mono">{invoice.number}</dd>
             </dl>
+            {qr && (
+              <div className="mt-4 flex items-center gap-4 border-t border-[#eef0f3] pt-4">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a data URL drawn on the server */}
+                <img src={qr} alt="" width={120} height={120} className="h-[120px] w-[120px] shrink-0 rounded border border-[#e4e7ec]" />
+                <p className="text-[12.5px] leading-relaxed text-[#6b7486]">{w.qr}</p>
+              </div>
+            )}
           </section>
         )}
 

@@ -29,6 +29,7 @@
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "@revio/booking": "workspace:*",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.0",
     "@types/qrcode": "^1.5.5",

@@ -23,6 +23,7 @@ export const PAY_WORDS = {
     testNote: "TEST mode — this charges nothing.",
     noCard: "Card payment is not available for this invoice right now — please pay by bank transfer below.",
     bank: "Or pay by bank transfer", bankOnly: "Pay by bank transfer", bankName: "Bank", reference: "Reference", download: "Download the invoice",
+    qr: "Scan it with your banking app — the amount and the reference fill in by themselves. If your app does not read it, use the details above.",
     questions: (e: string) => `Questions about this invoice? Write to ${e}.`,
   },
   bg: {
@@ -34,6 +35,7 @@ export const PAY_WORDS = {
     testNote: "ТЕСТОВ режим — нищо не се таксува.",
     noCard: "В момента тази фактура не може да се плати с карта — моля, платете с банков превод по-долу.",
     bank: "Или платете с банков превод", bankOnly: "Платете с банков превод", bankName: "Банка", reference: "Основание", download: "Изтеглете фактурата",
+    qr: "Сканирайте го с приложението на банката си — сумата и основанието се попълват сами. Ако приложението не го чете, използвайте данните по-горе.",
     questions: (e: string) => `Въпроси за фактурата? Пишете на ${e}.`,
   },
 } as const;

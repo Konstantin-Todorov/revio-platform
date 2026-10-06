@@ -45,7 +45,7 @@ export default async function WelcomeStepPage({ params }: { params: Promise<{ st
     }),
     prisma.propertyDefaults.findUnique({ where: { propertyId: property.id } }),
     prisma.taxFee.findFirst({
-      where: { propertyId: property.id, basis: "per_person", type: "fixed", active: true },
+      where: { propertyId: property.id, basis: { in: ["per_person_night", "per_person"] }, type: "fixed", active: true },
     }),
   ]);
 

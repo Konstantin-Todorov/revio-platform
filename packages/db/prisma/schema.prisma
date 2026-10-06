@@ -1878,7 +1878,7 @@ model TaxFee {
   type        String // percent | fixed
   pct         Float?
   amountMinor Int?
-  basis       String // per_room | per_person | per_night | per_stay
+  basis       String // per_room | per_person (once per stay) | per_person_night (tourist tax) | per_night | per_stay
   inclusion   String  @default("excluded") // included | excluded
   active      Boolean @default(true)
 

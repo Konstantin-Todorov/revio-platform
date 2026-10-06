@@ -38,6 +38,19 @@ export async function ensurePayToken(invoiceId: string): Promise<string> {
   return after!.payToken!;
 }
 
+/**
+ * Who receives mail about an invoice: the billing address, else the account owner — what the hotel's
+ * own Billing screen promises ("blank sends them to the account owner"). ONE answer for the request,
+ * the reminders and the receipt: the receipt used to read the billing field alone, so a hotel that
+ * left it blank on our word was asked to pay and never told it had.
+ */
+export async function invoiceRecipient(tenantId: string, billingEmail: string | null | undefined): Promise<string | null> {
+  const billing = billingEmail?.trim();
+  if (billing) return billing;
+  const owner = await prisma.user.findFirst({ where: { tenantId, role: "owner", active: true }, select: { email: true } });
+  return owner?.email?.trim() || null;
+}
+
 export type MailKind = "request" | "soon" | "due" | "overdue";
 
 export type SendOutcome =
@@ -56,15 +69,7 @@ export async function sendInvoiceMail(invoiceId: string, kind: MailKind): Promis
     prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
     prisma.operatorCompany.findUnique({ where: { id: "singleton" } }),
   ]);
-  /*
-   * The billing address, else the account owner — which is what the hotel's own Billing screen
-   * promises ("blank sends them to the account owner"). The mail went nowhere instead, so a hotel that
-   * left the field empty on our word never received an invoice.
-   */
-  const owner = billing?.billingEmail?.trim()
-    ? null
-    : await prisma.user.findFirst({ where: { tenantId: invoice.tenantId, role: "owner", active: true }, select: { email: true } });
-  const to = billing?.billingEmail?.trim() || owner?.email?.trim();
+  const to = await invoiceRecipient(invoice.tenantId, billing?.billingEmail);
   if (!to) return { ok: false, code: "no_email", error: `No billing email and no active owner for ${tenant?.name ?? "this client"}. Add one on their client page, under Billing.` };
 
   const lang = invoice.language === "en" ? "en" : "bg";

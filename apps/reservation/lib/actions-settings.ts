@@ -101,7 +101,7 @@ export async function saveTaxFee(fd: FormData): Promise<void> {
     type,
     pct: type === "percent" ? Math.max(0, decimal(fd, "pct", 0)) : null,
     amountMinor: type === "fixed" ? money(fd, "amount", 0) : null,
-    basis: ["per_room", "per_person", "per_night", "per_stay"].includes(str(fd, "basis")) ? str(fd, "basis") : "per_stay",
+    basis: ["per_room", "per_person", "per_person_night", "per_night", "per_stay"].includes(str(fd, "basis")) ? str(fd, "basis") : "per_stay",
     inclusion: str(fd, "inclusion") === "included" ? "included" : "excluded",
     active: fd.get("active") != null,
   };

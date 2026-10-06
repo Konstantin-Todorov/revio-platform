@@ -22,6 +22,7 @@ describe("feeAmount", () => {
     expect(feeAmount({ ...cleaning, basis: "per_night" }, stay)).toBe(4000);
     expect(feeAmount({ ...cleaning, basis: "per_room" }, stay)).toBe(2000);
     expect(feeAmount({ ...cleaning, basis: "per_person" }, stay)).toBe(4000);
+    expect(feeAmount({ ...cleaning, basis: "per_person_night" }, stay)).toBe(2000 * stay.guests * stay.nights);
   });
 
   it("treats an unknown basis as per-stay rather than throwing on a guest", () => {

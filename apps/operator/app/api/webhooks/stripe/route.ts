@@ -5,6 +5,7 @@ import { sendEmail } from "@revio/email";
 import { invoicePaidEmail } from "@/lib/invoice-emails";
 import { invoiceDocData } from "@/lib/invoice-data";
 import { docMoney, invoiceFileHtml, invoiceFileName } from "@/lib/invoice-html";
+import { invoiceRecipient } from "@/lib/invoice-mailer";
 
 /**
  * Where Stripe tells us an invoice has been paid.
@@ -294,8 +295,9 @@ async function sendPaidReceipt(invoiceId: string): Promise<void> {
     prisma.tenant.findUnique({ where: { id: invoice.tenantId }, select: { name: true } }),
     prisma.clientBilling.findUnique({ where: { tenantId: invoice.tenantId } }),
   ]);
-  const to = billing?.billingEmail?.trim();
-  // No address on file is a gap to fix on the client page, not a reason to fail a settled payment.
+  // The same recipient as the invoice itself — billing address, else the owner.
+  const to = await invoiceRecipient(invoice.tenantId, billing?.billingEmail);
+  // No address at all is a gap to fix on the client page, not a reason to fail a settled payment.
   if (!to) return;
 
   const owed = invoice.grossMinor ?? invoice.amountMinor;

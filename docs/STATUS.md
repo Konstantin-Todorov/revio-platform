@@ -325,8 +325,16 @@ says who can move it. Details sit where the link points.
    CRS hold and confirm; Operator new client. **Proven by two raw requests carrying one token against a
    real folio: 2 lines without the guard, 1 with it.** Tokens older than two days are pruned by the
    hold-expiry job. Two tabs are still two submissions — on purpose: that is two intents.
-5. **Money reconciled end to end** — one invoice by hand, and an exhaustive test of the all-in promise
-   across occupancy, extras, nights and city-tax exemptions. `HANDOFF` §5.
+5. ~~**Money reconciled end to end**~~ ✅ **2026-10-06** — `apps/pms/lib/money-reconcile-db.test.ts`
+   books **200 stays** through the guest's booking page (4 room types × 5 lengths × occupancy and
+   children × extras per night/per stay × every plan the page sells × both city-tax modes) and follows
+   each to the bill: results page → checkout quote → confirmation → stored total → folio + every night
+   audit → tax invoice. **0 disagreements.** Its first run found **68**: the tourist tax was charged
+   once per guest per STAY, not per night — 2 guests × 3 nights on 1.50 billed 3.00 while the hotel
+   owed the council 9.00. New fee basis `per_person_night` (core `feeAmount`), the default in RevioCRS →
+   Taxes and what first-run setup writes. ⚠️ **DesManagement's City Tax (1.20) is still `per_person`** —
+   not changed (real client); the founder decides. Opt-in DB test: see its header. Still open: one
+   invoice taken by hand by a person.
 6. **RevioDirect takes real payments** (research 2026-09-29: Mews, Cloudbeds, SiteMinder/Little
    Hotelier, Apaleo, Lighthouse, SynXis, HotelRunner). Today the guarantee confirms Stripe's own test
    card (`pm_card_visa`) — no guest card is ever collected — and `CancellationPolicy` is a name with no
@@ -356,9 +364,10 @@ says who can move it. Details sit where the link points.
    All proven locally on a Stripe test connected account. Left: e (pay link), a pre-arrival email
    naming the coming charge, and the founder's live-mode decision for guests.
    Needs the founder's live-mode decision for guests (a different decision from our own invoicing).
-7. **Invoices, the next small steps** — the paid receipt should fall back to the account owner like
-   the invoice mail does; a SEPA/EPC QR code for the bank transfer on the pay page; a coverage test for
-   RevioDirect's `guest` dictionary.
+7. **Invoices, the next small steps** — ✅ 2026-10-06 the paid receipt now goes to the same
+   recipient as the invoice (`invoiceRecipient`: billing address, else the owner); ✅ a SEPA/EPC QR code
+   for the bank transfer on `/pay/<token>` (`apps/operator/lib/epc-qr.ts`, decoded and checked).
+   Left: a coverage test for RevioDirect's `guest` dictionary.
 
 **Check — each is a question nobody has answered yet**
 

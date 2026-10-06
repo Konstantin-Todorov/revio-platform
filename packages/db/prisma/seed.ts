@@ -422,7 +422,7 @@ async function main() {
   await prisma.propertyDefaults.create({ data: { ...t, defMinLos: 1 } });
   await prisma.taxFee.createMany({
     data: [
-      { ...t, name: "City tax", type: "fixed", amountMinor: 150, basis: "per_person", inclusion: "excluded" },
+      { ...t, name: "City tax", type: "fixed", amountMinor: 150, basis: "per_person_night", inclusion: "excluded" },
       { ...t, name: "VAT 9%", type: "percent", pct: 9, basis: "per_stay", inclusion: "included" },
     ],
   });

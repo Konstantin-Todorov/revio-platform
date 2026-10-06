@@ -116,7 +116,11 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
 ## 6. RevioDirect — the hotel's own booking page
 
 - **All-in pricing.** The first number a guest sees is the number they pay — one calculation behind
-  the quote, the summary, the confirmation, the email and the folio.
+  the quote, the summary, the confirmation, the email and the folio. Proven on 200 stays followed from
+  the results page to the tax invoice — every occupancy, children, extras per night and per stay, every
+  rate plan, tourist tax added or included — with not one cent of difference
+  (*`apps/pms/lib/money-reconcile-db.test.ts`*, 2026-10-06). Tourist tax is charged per person **per
+  night**.
 - **A booking lands everywhere at once**, with no integration step: the reservation, the guest
   profile and the front-desk arrival are one record, not three synchronised copies. Demonstrated end
   to end on production.
