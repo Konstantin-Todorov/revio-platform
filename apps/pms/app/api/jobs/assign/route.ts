@@ -41,6 +41,8 @@ export async function POST(req: NextRequest) {
     if (!lease.ran) {
       return NextResponse.json({ ok: true, skipped: "another instance holds this job", heldBy: lease.heldBy });
     }
+    // Some properties failed: the rest were placed, and the run is still red for the runner.
+    if (lease.result.failed > 0) return NextResponse.json({ ok: false, ...lease.result }, { status: 500 });
     return NextResponse.json({ ok: true, ...lease.result });
   } catch (err) {
     console.error("auto-assign: failed", err);

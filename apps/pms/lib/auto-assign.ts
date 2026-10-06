@@ -385,27 +385,46 @@ async function staffedFloorsNow(
 }
 
 /** Sweep every property. The scheduled entry point; see `app/api/jobs/assign/route.ts`. */
+/** Properties placed at once — each its own tenant's work, bounded by the shared connection pool. */
+export const ASSIGN_CONCURRENCY = 4;
+
 export async function autoAssignAllProperties(
   db: ReturnType<typeof forTenant>,
-): Promise<{ properties: number; assigned: number; reoptimised: number; unplaceable: number; details: string[] }> {
+): Promise<{ properties: number; assigned: number; reoptimised: number; unplaceable: number; failed: number; details: string[] }> {
   const properties = await db.property.findMany({
     select: { id: true, tenantId: true, name: true, timezone: true },
   });
   let assigned = 0;
   let unplaceable = 0;
   let reoptimised = 0;
+  let failed = 0;
   const details: string[] = [];
-  for (const p of properties) {
-    // Place first, then re-optimise. A booking that arrives unassigned an hour before check-in
-    // should be placed by the same pass that would have improved it, not left for the next tick.
-    const r = await autoAssignForProperty(p.tenantId, p.id, p.timezone);
-    assigned += r.assigned;
-    unplaceable += r.unplaceable;
-    for (const d of r.details) details.push(`${p.name}: ${d}`);
+  /*
+   * Measured 2026-10-06 (`scale-assign-db.test.ts`): 50 hotels × 30 rooms with a whole 60-day book
+   * unassigned took 65 s one property at a time; the steady tick after it, 3 s. Four at a time, and
+   * — as with the Close Day sweep — one property that throws is named and the others still run.
+   */
+  async function one(p: (typeof properties)[number]): Promise<void> {
+    try {
+      // Place first, then re-optimise. A booking that arrives unassigned an hour before check-in
+      // should be placed by the same pass that would have improved it, not left for the next tick.
+      const r = await autoAssignForProperty(p.tenantId, p.id, p.timezone);
+      assigned += r.assigned;
+      unplaceable += r.unplaceable;
+      for (const d of r.details) details.push(`${p.name}: ${d}`);
 
-    const o = await reoptimiseImminentArrivals(p.tenantId, p.id, p.timezone);
-    reoptimised += o.moved;
-    for (const d of o.details) details.push(`${p.name}: ${d}`);
+      const o = await reoptimiseImminentArrivals(p.tenantId, p.id, p.timezone);
+      reoptimised += o.moved;
+      for (const d of o.details) details.push(`${p.name}: ${d}`);
+    } catch (err) {
+      failed++;
+      details.push(`${p.name}: FAILED — ${err instanceof Error ? err.message : String(err)}`);
+      console.error(`auto-assign: ${p.name} (${p.id}) failed`, err);
+    }
   }
-  return { properties: properties.length, assigned, reoptimised, unplaceable, details };
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(ASSIGN_CONCURRENCY, properties.length) }, async () => {
+    while (next < properties.length) await one(properties[next++]!);
+  }));
+  return { properties: properties.length, assigned, reoptimised, unplaceable, failed, details };
 }

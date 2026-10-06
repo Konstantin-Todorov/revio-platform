@@ -17,6 +17,9 @@ import { deliverNewBookings } from "@/lib/booking-delivery";
 
 export const dynamic = "force-dynamic";
 
+/** Channels pulled at once — each its own Channex property. */
+const PULL_CONCURRENCY = 4;
+
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) {
@@ -75,12 +78,17 @@ export async function POST(req: NextRequest) {
       });
 
       let imported = 0, updated = 0, failed = 0, rejected = 0;
-      for (const channel of channels) {
+      /*
+       * Four channels at a time. Each is a different Channex property, and an empty feed read takes
+       * ~0.3 s (measured 2026-10-06 against Channex) — one after another, 200 hotels is 60–120 s of
+       * waiting inside a request the runner abandons at 120 s.
+       */
+      const pullOne = async (channel: (typeof channels)[number]) => {
         let outcome;
         try {
           outcome = await pullChannel(db, channel.id);
         } catch (e) {
-          failed++;
+          // Counted once, below — this used to add one here AND one in the `else`.
           outcome = { ok: false as const, imported: 0, updated: 0, unchanged: 0, failedImport: 0, mode: "unknown", error: e instanceof Error ? e.message : "pull threw" };
         }
         if (outcome.ok) {
@@ -125,7 +133,11 @@ export async function POST(req: NextRequest) {
 
         // "N new bookings" to a hotel that runs RevioLink alone — one function for every import path.
         if (outcome.ok && outcome.imported > 0) await deliverNewBookings(channel.id, outcome.imported);
-      }
+      };
+      let next = 0;
+      await Promise.all(Array.from({ length: Math.min(PULL_CONCURRENCY, channels.length) }, async () => {
+        while (next < channels.length) await pullOne(channels[next++]!);
+      }));
 
       return { ok: true, channels: channels.length, imported, updated, failed, rejected };
     });

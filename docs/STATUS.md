@@ -393,7 +393,11 @@ says who can move it. Details sit where the link points.
   runner abandons at 120 s. 50 hotels × 30 rooms: 14 s; **200 × 30: 66 s one at a time** — no margin
   for Railway. Now 4 at a time (own transaction each): **200 × 30 in 12 s**. And one hotel that threw
   used to end the sweep for every hotel after it; now it is named, the rest close, the run reports red.
-  Not yet measured at scale: `auto-assign` and the Channex pull.
+  **Auto-assign** (`scale-assign-db.test.ts`): 50 hotels × 30 rooms with a whole 60-day book unassigned
+  took 65 s one at a time; now 4 at a time, **200 hotels / 78,200 stays placed in 67 s**, the steady
+  tick 5 s; one failing property no longer stops the rest. **Channex pull**: an empty feed read is
+  ~0.3 s at Channex, so 200 hotels one after another is 60–120 s — now 4 at a time (Channex documents
+  limits only on ARI writes, per property); a thrown pull was also counted as failed twice.
 - **Multi-property and time zones** — a report that sums properties in two zones; the property switcher
   across every screen. `HANDOFF` §7.
 - **RevioLink's "every plan closed" rule** reads plan cells and defaults, not RevioCRS's date-ranged
