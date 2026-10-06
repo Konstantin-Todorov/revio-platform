@@ -33,7 +33,7 @@ sharing that database.
   No manual `railway up` needed. Migrations run on each deploy; the DB is never reset.
 - **Seed/inspect the remote DB from local** with Postgres's public URL (internal `DATABASE_URL` isn't
   reachable off-Railway):
-  `DATABASE_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" pnpm --filter @revio/db db:seed`
+  `DATABASE_URL="$(railway variables --service Postgres-EU --json | jq -r .DATABASE_PUBLIC_URL)" pnpm --filter @revio/db db:seed`
 
 The original first-deploy runbook is kept below for reference / new apps.
 
@@ -147,7 +147,7 @@ in the database has RLS enabled — none missing*.
 
 ```bash
 # Public URL of the shared DB (owner/superuser connection — for the one-time role setup)
-OWNER_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)"
+OWNER_URL="$(railway variables --service Postgres-EU --json | jq -r .DATABASE_PUBLIC_URL)"
 
 # 1. Create the restricted app role + grants (run once; generate the password, never commit it)
 psql "$OWNER_URL" -v app_password="$REVIO_APP_PASSWORD" -f packages/db/prisma/rls-role.sql
@@ -235,7 +235,7 @@ processing request") right after `serviceConnect`, it's a race — just retry it
 `railway up --service <name> --detach` for the first build (or setting a var already triggers one from
 the connected source). **NB deploy does NOT re-seed** — new entitlement flags (e.g. `hasPms`) +
 backfill data must be applied to prod separately via `DATABASE_PUBLIC_URL`
-(`railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL`); the PMS units backfill is
+(`railway variables --service Postgres-EU --json | jq -r .DATABASE_PUBLIC_URL`); the PMS units backfill is
 kept as an idempotent, re-runnable example at `packages/db/scripts/pms-prod-backfill.sql`.
 
 ## Auto-deploy on push (optional, later)
@@ -313,7 +313,7 @@ into noise, silently — and it surfaces later as a hotel's rates mysteriously f
 2. Re-encrypt every row:
    ```bash
    CONNECTIVITY_SECRET=<new> CONNECTIVITY_SECRET_PREVIOUS=<old> \
-   DATABASE_URL="$(railway variables --service Postgres --json | jq -r .DATABASE_PUBLIC_URL)" \
+   DATABASE_URL="$(railway variables --service Postgres-EU --json | jq -r .DATABASE_PUBLIC_URL)" \
    pnpm --filter @revio/db rotate-connectivity-key --dry-run    # inspect first
    ```
    Then again without `--dry-run`. It reads each row, re-seals it, and **reads it back** to confirm —

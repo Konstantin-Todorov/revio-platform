@@ -38,7 +38,7 @@ if [ -n "${DATABASE_PUBLIC_URL:-}" ]; then
   PROD_URL="$DATABASE_PUBLIC_URL"
 else
   echo "→ resolving connection details from Railway"
-  PROD_URL="$(railway variables --service Postgres --json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).DATABASE_PUBLIC_URL')"
+  PROD_URL="$(railway variables --service Postgres-EU --json | node -pe 'JSON.parse(require("fs").readFileSync(0,"utf8")).DATABASE_PUBLIC_URL')"
 fi
 
 SERVER_MAJOR="$(psql "$PROD_URL" -tAc 'SHOW server_version;' | cut -d. -f1)"

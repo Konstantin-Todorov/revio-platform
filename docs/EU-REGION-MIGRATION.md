@@ -1,5 +1,22 @@
 # Moving Revio to the EU (Railway `europe-west4`, Amsterdam)
 
+> ## ✅ DONE — 6 October 2026, 04:26–04:41 UTC (07:26–07:41 Sofia)
+>
+> Writes frozen at 04:26:36 (old database set read-only, 15 sessions ended). Copied 43 s + 35 s;
+> 82/82 tables identical; `rls-verify` 139/139 on the new database before any app touched it. The five
+> apps repointed to `postgres-eu.railway.internal` (host only — same passwords), `reservation` and
+> `booking` to the new bucket `revio-photos-eu` (16/16 objects verified), all eight services moved to
+> `europe-west4-drams3a`. Apps up on the new database ≈04:31–04:33 — **writes frozen ≈5–6 minutes,
+> reads never down.** Verified after: 6 connections on the new database and none on the old; 16/16
+> jobs ok and writing their leases; Channex pulls succeeding from Amsterdam (a non-200 throws, so
+> "success" means 200); room photos served from the new bucket; `state-audit` identical to before.
+> Backups repointed (`Postgres-EU`, GitHub secrets). Website updated to say EU, with GitHub added
+> for the encrypted backup.
+>
+> **Kept 30 days, read-only, then deleted:** the old `Postgres` service in `iad` (default_transaction_
+> read_only = on) and the old bucket `optimized-vase`. Rollback until then: point the five
+> `DATABASE_URL`/`DIRECT_DATABASE_URL` back at `postgres.railway.internal` and turn read-only off.
+
 > Written 2026-10-05 at the founder's request: *a careful, rehearsed plan before anything is touched.*
 > Nothing in production has been changed. Every "now" below was read from Railway or the code today.
 
