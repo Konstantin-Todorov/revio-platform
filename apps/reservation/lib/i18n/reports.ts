@@ -11,6 +11,8 @@ import type { Translations } from "@revio/ui/i18n";
 export interface ReportsStrings {
   title: string;
   subtitle: (scope: string) => string;
+  /** The group's name — `scope.label` is English. */
+  groupLabel: (count: number) => string;
   exportExcel: string;
   csv: string;
   tabs: Record<"performance" | "pickup" | "source" | "products" | "cancellation" | "otb" | "availability", string>;
@@ -153,6 +155,7 @@ export const reports: Translations<ReportsStrings> = {
   en: {
     title: "Analytics",
     subtitle: (sc) => `${sc} · occupancy, rate and revenue for the period you choose`,
+    groupLabel: (n) => `All properties · ${n} hotels`,
     exportExcel: "Export Excel",
     csv: "CSV",
     tabs: {
@@ -296,6 +299,7 @@ export const reports: Translations<ReportsStrings> = {
   bg: {
     title: "Анализи",
     subtitle: (sc) => `${sc} · заетост, цена и приходи за периода, който изберете`,
+    groupLabel: (n) => `Всички обекти · ${n}`,
     exportExcel: "Експорт в Excel",
     csv: "CSV",
     tabs: {

@@ -398,8 +398,15 @@ says who can move it. Details sit where the link points.
   tick 5 s; one failing property no longer stops the rest. **Channex pull**: an empty feed read is
   ~0.3 s at Channex, so 200 hotels one after another is 60–120 s — now 4 at a time (Channex documents
   limits only on ARI writes, per property); a thrown pull was also counted as failed twice.
-- **Multi-property and time zones** — a report that sums properties in two zones; the property switcher
-  across every screen. `HANDOFF` §7.
+- ~~**Multi-property and time zones**~~ ✅ **2026-10-06.** A second local property in another time zone
+  (Lisbon) with names found nowhere else; `route-walk` gained `WALK_PROPERTY` (walk with the switcher on
+  that property) and `WALK_FORBID` (words that must not appear). All 71 RevioLink/CRS/PMS screens, both
+  ways, showed only their own property — and the same walk with the property's OWN words forbidden
+  failed on 12 screens, so the check can see. Found: the RevioCRS portfolio view sums on ONE calendar
+  "today" and ONE set of counting rules (the active property's) — now said on the Dashboard when a
+  hotel of the group is on another date (time zones) or counts no-shows / revenue differently; and the
+  group label was English on the Bulgarian Dashboard and Reports. A true per-property portfolio sum is
+  a larger change, only worth it when a client runs hotels in two zones.
 - **RevioLink's "every plan closed" rule** reads plan cells and defaults, not RevioCRS's date-ranged
   restriction rules; the push reads both. Harmless until a CRS rule stop-sells every plan.
 - **Ventsi Group** is suspended and disconnected and still holds a per-tenant Channex credential, which

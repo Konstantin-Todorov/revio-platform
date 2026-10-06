@@ -58,6 +58,12 @@ export interface CrsScope {
   primary: Awaited<ReturnType<typeof getProperty>>;
   count: number;
   label: string;
+  /**
+   * Each property's own "today" and the settings that change how a sum is counted — group scope only.
+   * A portfolio total is computed on ONE calendar window and ONE set of rules; when the hotels of a
+   * group disagree on either, the screen has to say whose it used rather than mix them silently.
+   */
+  members?: { name: string; today: string; countNoShowsAsSold: boolean; revenueDisplay: string }[];
 }
 
 /** Resolve the reporting scope (CRS-GUIDE §4.1). Dashboard + Analytics read THIS instead of
@@ -73,12 +79,23 @@ export async function getScope(): Promise<CrsScope> {
       orderBy: { name: "asc" },
     });
     const primary = properties[0]!;
+    const defaults = await prisma.propertyDefaults.findMany({
+      where: { propertyId: { in: properties.map((p) => p.id) } },
+      select: { propertyId: true, countNoShowsAsSold: true, revenueDisplay: true },
+    });
+    const byId = new Map(defaults.map((d) => [d.propertyId, d]));
     return {
       scope: "group",
       propertyIds: properties.map((p) => p.id),
       primary,
       count: properties.length,
       label: `All properties · ${properties.length} hotels`,
+      members: properties.map((p) => ({
+        name: p.name,
+        today: todayInTz(p.timezone),
+        countNoShowsAsSold: byId.get(p.id)?.countNoShowsAsSold ?? true,
+        revenueDisplay: byId.get(p.id)?.revenueDisplay === "net" ? "net" : "gross",
+      })),
     };
   }
   const primary = await getProperty();

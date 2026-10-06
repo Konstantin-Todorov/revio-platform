@@ -69,7 +69,14 @@ export interface DashboardStrings {
     bySource: (total: string) => string;
     noRevenue: string;
   };
-  portfolio: { lead: string; body: (count: number) => string; autoSelects: string; switchTo: string };
+  portfolio: { lead: string; body: (count: number) => string; autoSelects: string; switchTo: string;
+    /** Said only when the group's hotels are on different calendar days right now (time zones). */
+    otherDays: (usedFor: string, day: string, others: string) => string;
+    /** Said only when the group's hotels count a sum differently. */
+    otherRules: (usedFor: string, rules: string) => string;
+    ruleNoShows: string; ruleRevenue: string;
+    /** The group's name in a subtitle — `scope.label` is English and is not shown to a reader. */
+    scopeLabel: (count: number) => string };
   actions: {
     title: string;
     empty: string;
@@ -177,6 +184,11 @@ export const dashboard: Translations<DashboardStrings> = {
       body: (count) => `KPIs, charts, source mix and forecast above sum across all ${count} properties (ratios recomputed from combined totals). The operational lists below auto-select`,
       autoSelects: "",
       switchTo: "— switch to a single property to act on its arrivals, alerts and bookings.",
+      otherDays: (usedFor, day, others) => `"Today" is ${usedFor}'s day, ${day}; ${others} — a hotel in another time zone is on a different date right now.`,
+      otherRules: (usedFor, rules) => `Totals follow ${usedFor}'s settings for ${rules}; the other hotels set them differently.`,
+      ruleNoShows: "counting no-shows as sold",
+      ruleRevenue: "revenue with or without VAT",
+      scopeLabel: (n) => `All properties · ${n} hotels`,
     },
     actions: {
       title: "Action Center",
@@ -292,6 +304,11 @@ export const dashboard: Translations<DashboardStrings> = {
       body: (count) => `Показателите, графиките, източниците и прогнозата горе са сбор от всичките ${count} обекта (съотношенията са преизчислени от общите суми). Оперативните списъци долу избират автоматично`,
       autoSelects: "",
       switchTo: "— изберете отделен обект, за да работите с неговите пристигания, известия и резервации.",
+      otherDays: (usedFor, day, others) => `„Днес“ е денят на ${usedFor} — ${day}; ${others}. Обект в друга часова зона в момента е на друга дата.`,
+      otherRules: (usedFor, rules) => `Сумите следват настройките на ${usedFor} за ${rules}; другите обекти ги имат различно.`,
+      ruleNoShows: "броене на неявилите се като продадени",
+      ruleRevenue: "приходи с или без ДДС",
+      scopeLabel: (n) => `Всички обекти · ${n}`,
     },
     actions: {
       title: "За действие",

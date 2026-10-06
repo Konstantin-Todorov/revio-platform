@@ -64,7 +64,7 @@ export default async function ReportsPage({
     <div className="space-y-4">
       <PageHeader
         title={T.title}
-        subtitle={T.subtitle(isGroup ? scope.label : property.name)}
+        subtitle={T.subtitle(isGroup ? T.groupLabel(scope.count) : property.name)}
         action={
           <div className="flex items-center gap-2">
             <a href={`/api/reports/export?${qs}`} className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">

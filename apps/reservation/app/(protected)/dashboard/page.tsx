@@ -60,6 +60,23 @@ export default async function DashboardPage({
   const basis: CompareBasis = sp.basis === "lw" ? "lw" : "yoy";
   const basisLabel = basis === "lw" ? c0.basis.lw : c0.basis.yoy;
   const isGroup = scope.scope === "group";
+  /*
+   * What a portfolio total silently assumes, said when it is not true for every hotel: one calendar
+   * "today" (the active property's), and one set of counting rules (its settings too).
+   */
+  const portfolioCaveats: string[] = [];
+  if (isGroup && scope.members) {
+    const otherDays = scope.members.filter((m) => m.today !== ops.todayIso);
+    if (otherDays.length) {
+      portfolioCaveats.push(t.portfolio.otherDays(ops.property.name, ops.todayIso, otherDays.map((m) => `${m.name} — ${m.today}`).join(", ")));
+    }
+    const mine = scope.members.find((m) => m.name === ops.property.name);
+    const rules = [
+      ...(scope.members.some((m) => m.countNoShowsAsSold !== (ops.defaults?.countNoShowsAsSold ?? true)) ? [t.portfolio.ruleNoShows] : []),
+      ...(scope.members.some((m) => m.revenueDisplay !== (mine?.revenueDisplay ?? "gross")) ? [t.portfolio.ruleRevenue] : []),
+    ];
+    if (rules.length) portfolioCaveats.push(t.portfolio.otherRules(ops.property.name, rules.join(", ")));
+  }
   const [metrics, stly, board, f7, f30] = await Promise.all([
     getRangeMetrics(range),
     getRangeMetrics(comparisonRange(range, basis)), // YoY=364d (STLY) or LW=7d, per the toggle
@@ -146,7 +163,7 @@ export default async function DashboardPage({
     <div className="space-y-5">
       <PageHeader
         title={t.title}
-        subtitle={`${isGroup ? `${scope.label}` : ops.property.name} · ${rangeLabel(range, c0, day)}`}
+        subtitle={`${isGroup ? t.portfolio.scopeLabel(scope.count) : ops.property.name} · ${rangeLabel(range, c0, day)}`}
         action={
           <Link href="/reports" className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
             <TrendingUp className="h-3.5 w-3.5" /> {t.reports}
@@ -233,6 +250,7 @@ export default async function DashboardPage({
           <span>
             <span className="font-semibold">{t.portfolio.lead}</span> {t.portfolio.body(scope.count)} <span className="font-semibold">{ops.property.name}</span>{" "}
             {t.portfolio.switchTo}
+            {portfolioCaveats.map((c) => <span key={c} className="mt-1 block">{c}</span>)}
           </span>
         </div>
       )}

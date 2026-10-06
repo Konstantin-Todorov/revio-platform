@@ -279,11 +279,20 @@ async function walk(app, cfg, token, roleLabel, ids, expect) {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         res = await fetch(`http://localhost:${cfg.port}${route}`, {
-          headers: { cookie: `${cfg.cookie}=${token}` },
+          // WALK_PROPERTY: walk as if the switcher were on that property (multi-property check).
+          headers: { cookie: `${cfg.cookie}=${token}${process.env.WALK_PROPERTY ? `; revio_property=${process.env.WALK_PROPERTY}` : ""}` },
           redirect: "manual",
           signal: AbortSignal.timeout(attempt === 0 ? 20000 : 60000),
         });
         html = res.status === 200 ? visibleText(await res.text()) : "";
+        /*
+         * WALK_FORBID: words that belong to ANOTHER property of the same hotel group. With the
+         * switcher on property B, a screen showing property A's room or guest is reading the wrong
+         * property — the defect class a chain finds and a one-hotel walk never can.
+         */
+        for (const word of (process.env.WALK_FORBID ?? "").split("|").filter(Boolean)) {
+          if (html.includes(word)) failures.push(`${route} — shows "${word}", which belongs to another property`);
+        }
         break;
       } catch (e) {
         res = null;
@@ -405,6 +414,8 @@ for (const [app, cfg] of Object.entries(APPS)) {
    */
   const scope = cfg.operator
     ? ""
+    : process.env.WALK_PROPERTY
+    ? `and p.id = '${process.env.WALK_PROPERTY.replace(/[^A-Za-z0-9_-]/g, "")}'`
     : `and p."tenantId" = (select "tenantId" from "User" where id = '${ownerId}')`;
   const ids = cfg.operator
     ? { tenantId: psql(`select id from "Tenant" where "isDemo" = true limit 1`) }
