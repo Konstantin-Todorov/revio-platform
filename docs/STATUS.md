@@ -407,8 +407,10 @@ says who can move it. Details sit where the link points.
   hotel of the group is on another date (time zones) or counts no-shows / revenue differently; and the
   group label was English on the Bulgarian Dashboard and Reports. A true per-property portfolio sum is
   a larger change, only worth it when a client runs hotels in two zones.
-- **RevioLink's "every plan closed" rule** reads plan cells and defaults, not RevioCRS's date-ranged
-  restriction rules; the push reads both. Harmless until a CRS rule stop-sells every plan.
+- ~~**RevioLink's "every plan closed" rule**~~ ✅ **2026-10-06** — the calendar now resolves stop-sell
+  through `resolveRestriction` with RevioCRS's rules, as the push does (only rules for every channel
+  and source: the grid is not one channel's), and says when a CRS rule is what closed it, pointing to
+  where it can be lifted. Checked with a local rule: 3 nights closed by it, back to bookable without it.
 - **Ventsi Group** is suspended and disconnected and still holds a per-tenant Channex credential, which
   overrides the platform key (root `CLAUDE.md` §4). Decide before reinstating them.
 - ~~**`docs.reviosoft.app`** has no HSTS or frame protection~~ ✅ **2026-10-06** — `design/docs-preview/Caddyfile`: HSTS, `X-Frame-Options: DENY`, `frame-ancestors 'none'`, a CSP narrowed to what it loads; its internal README was public at /README.md and is now kept out of the upload. Deploy command in that folder's README.

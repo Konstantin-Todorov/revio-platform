@@ -900,6 +900,11 @@ model Property {
   bookingHeadline      String? // hero headline; null = platform default
   bookingSubheadline   String?
   bookingShowTrust     Boolean   @default(true) // the "why book direct" row
+  /// The HOTEL's own tags on its booking page (`@revio/core` booking/tracking.ts). Null = none, and
+  /// then no consent banner is shown either — there is nothing to consent to. Loaded only after the
+  /// guest accepts.
+  bookingGa4Id         String?
+  bookingMetaPixelId   String?
   // The hero background photograph (BG1). KEYS only — the bytes are in object storage via
   // @revio/storage, same rule as RoomTypePhoto and for the same arithmetic. Null throughout means
   // no photo, which is a designed state rather than a missing one: the preset's own hero still runs.
@@ -1986,14 +1991,11 @@ model PropertyDefaults {
   // Invoicing config (spec §4.3/§4.6) — the "jurisdiction pack" as data, never hardcoded. VAT rates
   // per charge category (BG defaults: 20% standard, 9% reduced for accommodation) + issuer legal
   // identity for the tax document. Edited in Configuration (E7).
-  /// Туристически данък (ЗМДТ чл. 61с ал. 1) — the municipal rate per нощувка, in minor units.
-  ///
-  /// Per property because the council sets it per settlement AND per category, so two hotels of one
-  /// owner in two towns owe different amounts on the same night. Null until the hotel states theirs;
-  /// a default would be a number somebody files.
-  /// DEPRECATED 2026-10-06 — neither read nor written. The rate is the tourist-tax TaxFee row
-  /// (`@revio/db` tourist-tax.ts), one for every product. Drop in a later migration.
-  touristTaxRateMinor      Int?
+  // The tourist tax RATE is not here: it is the tourist-tax TaxFee row (`@revio/db` tourist-tax.ts).
+  /// DEPRECATED, `@ignore`d so no client reads it. Two steps on purpose: dropping the column in the
+  /// same deploy would break the old instances still running during the rollout, whose client
+  /// selects every column. Drop it with a migration in a LATER deploy.
+  touristTaxRateMinor      Int?    @ignore
   /// `Л` in the чл. 61с ал. 5 formula — the DECLARED bed base, which is a figure the hotel agreed
   /// with its municipality and not one we can derive. Seeded from room capacity as a suggestion.
   touristTaxBeds           Int?

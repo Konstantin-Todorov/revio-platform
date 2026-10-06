@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Clock, CreditCard, MapPin, Phone, Mail, ShieldCheck, Ticket } from "lucide-react";
 import type { PublicProperty } from "@/lib/property";
 import { serverKit } from "@/lib/i18n/server";
+import { ConsentSettingsButton } from "@/components/Consent";
 
 /**
  * The hotel's own details, closing every page — in three columns a guest scans for one thing each:
@@ -74,6 +75,12 @@ export async function PropertyFooter({ property }: { property: PublicProperty })
               <Ticket size={14} aria-hidden className="mt-0.5 shrink-0" />
               <Link href={`/${property.slug}/my-booking`} className="link-quiet font-semibold">{f.myBooking}</Link>
             </li>
+            {(property.tags.ga4Id || property.tags.metaPixelId) && (
+              <li className="flex items-start gap-2">
+                <ShieldCheck size={14} aria-hidden className="mt-0.5 shrink-0" />
+                <ConsentSettingsButton label={s.consent.settings} />
+              </li>
+            )}
             {property.paymentReady && (
               <li className="flex items-start gap-2">
                 <CreditCard size={14} aria-hidden className="mt-0.5 shrink-0" />

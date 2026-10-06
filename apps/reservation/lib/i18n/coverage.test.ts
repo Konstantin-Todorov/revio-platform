@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { translationCoverage, type Translations } from "@revio/ui/i18n";
 import { shell } from "./shell";
+import { tracking } from "./tracking";
 import { auth } from "./auth";
 import { common } from "./common";
 import { dashboard } from "./dashboard";
@@ -29,7 +30,7 @@ import { terms } from "./terms";
  * half-English screen. Every RevioCRS dictionary is listed here; `lib/i18n/ready.ts` is switched on
  * only when this passes with all of them.
  */
-const COMPLETE: Record<string, Translations<unknown>> = { shell, auth, common, dashboard, pages, notifications, reservations, columnStrings, waitlist, guests, inventory, rates, bulk, rateErrors, reports, distribution, bookingEngine, settings, welcome, terms } as Record<string, Translations<unknown>>;
+const COMPLETE: Record<string, Translations<unknown>> = { shell, auth, common, dashboard, pages, notifications, reservations, columnStrings, waitlist, guests, inventory, rates, bulk, rateErrors, reports, distribution, bookingEngine, settings, welcome, terms, tracking } as Record<string, Translations<unknown>>;
 
 describe("RevioCRS dictionaries have every string in Bulgarian", () => {
   for (const [name, dict] of Object.entries(COMPLETE)) {

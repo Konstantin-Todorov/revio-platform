@@ -115,6 +115,14 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
 
 ## 6. RevioDirect — the hotel's own booking page
 
+- **The hotel's own Google Analytics and Meta pixel, asked for first.** In RevioCRS → Booking Engine →
+  Analytics & ads the hotel enters its GA4 Measurement ID and/or Meta pixel ID. Only then does its
+  booking page show a consent banner — Accept and Decline the same size, side by side — and nothing
+  from Google or Meta loads until the guest accepts; "Cookie settings" in the footer changes the
+  choice. A confirmed booking sends one purchase event (reference, total, currency — never the guest's
+  name, email or phone), once. With no id set there is no banner and nothing is loaded.
+  *`core/booking/tracking.ts`, `apps/booking/lib/tags.ts`, `components/Consent.tsx`.* Built 2026-10-06.
+
 - **All-in pricing.** The first number a guest sees is the number they pay — one calculation behind
   the quote, the summary, the confirmation, the email and the folio. Proven on 200 stays followed from
   the results page to the tax invoice — every occupancy, children, extras per night and per stay, every

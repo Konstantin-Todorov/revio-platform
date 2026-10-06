@@ -15,6 +15,7 @@ import { AskManageLink, ManagePanel } from "@/components/ManageBooking";
 import { bookingReference, manageAbility, previewSettlement } from "@revio/booking";
 import { directionsUrl, stayGoogleCalendarUrl, todayInTimeZone } from "@revio/core";
 import { mayManage } from "@/lib/manage";
+import { PurchaseEvent } from "@/components/Consent";
 
 export const dynamic = "force-dynamic";
 
@@ -208,6 +209,10 @@ export default async function ConfirmationPage({
              style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}>
             {s.reference(reference.toUpperCase())}
           </p>
+          {/* The hotel's tags count the booking — a confirmed one, with the guest's consent, once. */}
+          {!cancelled && !requested && (property.tags.ga4Id || property.tags.metaPixelId) && (
+            <PurchaseEvent slug={property.slug} tags={property.tags} reference={reference.toUpperCase()} valueMinor={charged.totalMinor} currency={reservation.currency} />
+          )}
 
           {sp.changed && !cancelled && (
             <p className="mx-auto mt-4 max-w-md rounded-lg px-4 py-2.5 text-[13.5px] font-semibold" role="status"

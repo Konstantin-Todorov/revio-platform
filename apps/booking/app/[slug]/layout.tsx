@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { bookingPreset } from "@revio/core";
+import { bookingPreset, needsConsent } from "@revio/core";
+import { Consent } from "@/components/Consent";
 import { getPublicProperty } from "@/lib/property";
 import { brandTokens, fontVars } from "@/lib/brand";
 import { LocaleProvider } from "@revio/ui/i18n-context";
@@ -59,6 +60,9 @@ export default async function PropertyLayout({
   // components by the provider, and stated on the page for screen readers and the browser's own
   // translate prompt (the root <html> cannot know it: it is rendered before a slug resolves).
   const locale = await guestLocale(property.defaultLanguage);
+  // The hotel's own tags, and the question they require — absent entirely when it has none.
+  const { s } = await serverKit(property);
+  const tools = [property.tags.ga4Id && "Google Analytics", property.tags.metaPixelId && "Meta pixel"].filter(Boolean).join(locale === "bg" ? " и " : " and ");
 
   return (
     <LocaleProvider locale={locale}>
@@ -93,6 +97,10 @@ export default async function PropertyLayout({
       }
     >
       {children}
+      {needsConsent(property.tags) && (
+        <Consent slug={property.slug} tags={property.tags}
+                 s={{ label: s.consent.label, body: s.consent.body(property.name, tools), accept: s.consent.accept, decline: s.consent.decline }} />
+      )}
     </div>
     </LocaleProvider>
   );

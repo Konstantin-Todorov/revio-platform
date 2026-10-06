@@ -6,6 +6,7 @@ import { SettingsNav, type SettingsSection } from "@revio/ui/settings-nav";
 import { PageHeader } from "@/components/ui/primitives";
 import { bookingEnginePage } from "@/lib/booking-engine-page";
 import { ratings as ratingsDict } from "@/lib/i18n/ratings";
+import { tracking as trackingDict } from "@/lib/i18n/tracking";
 
 /**
  * RevioDirect — the hotel's own booking page, configured here, in the shape Settings has: sections on
@@ -24,12 +25,14 @@ export default async function BookingEngineLayout({ children }: { children: Reac
   const { t } = await i18n();
   const s = t(beDict);
   const r = t(ratingsDict);
+  const tr = t(trackingDict);
   const SECTIONS: SettingsSection[] = [
     { href: "/booking-engine", label: s.nav.overview, blurb: s.nav.overviewBlurb },
     { href: "/booking-engine/look", label: s.nav.look, blurb: s.nav.lookBlurb, prefix: true },
     { href: "/booking-engine/payments", label: s.nav.payments, blurb: s.nav.paymentsBlurb },
     { href: "/booking-engine/extras", label: s.nav.extras, blurb: s.nav.extrasBlurb },
     { href: "/booking-engine/ratings", label: r.nav, blurb: r.navBlurb },
+    { href: "/booking-engine/tracking", label: tr.nav, blurb: tr.navBlurb },
   ];
   const ELSEWHERE: SettingsSection[] = [
     { href: "/settings/emails", label: s.nav.emails, blurb: s.nav.emailsBlurb },

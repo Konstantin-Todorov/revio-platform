@@ -62,6 +62,11 @@ export interface GuestStrings {
     times: (checkIn: string, checkOut: string) => string; allIn: string;
     contact: string; stay: string; help: string; myBooking: string; directions: string; securePay: string; directBenefit: string;
   };
+  /**
+   * The consent banner — shown only when the hotel has added its own Google Analytics or Meta pixel.
+   * Accept and Decline carry equal weight: a "Decline" hidden behind a second click is not consent.
+   */
+  consent: { label: string; body: (hotel: string, tools: string) => string; accept: string; decline: string; settings: string };
   pay: {
     title: (hotel: string) => string; lead: string; amount: string; forStay: string;
     pay: (amount: string) => string; paying: string;
@@ -332,6 +337,11 @@ export const guest: Translations<GuestStrings> = {
       contact: "Contact", stay: "Your stay", help: "Help", myBooking: "Find, change or cancel my booking",
       directions: "Directions", securePay: "Card payments are processed securely by Stripe — we never see your card number.",
       directBenefit: "Booking here, you book directly with the hotel.",
+    },
+    consent: {
+      label: "Cookies on this page",
+      body: (h, t) => `${h} would like to use ${t} to see how its booking page is used and to measure its ads. Nothing is loaded unless you accept, and you can change your mind any time in the footer.`,
+      accept: "Accept", decline: "Decline", settings: "Cookie settings",
     },
     pay: {
       title: (h) => `Payment to ${h}`,
@@ -664,6 +674,11 @@ export const guest: Translations<GuestStrings> = {
       contact: "Контакти", stay: "Вашият престой", help: "Помощ", myBooking: "Намерете, променете или откажете резервация",
       directions: "Упътване", securePay: "Плащанията с карта се обработват сигурно от Stripe — ние не виждаме номера на картата Ви.",
       directBenefit: "Резервирайки тук, резервирате директно с хотела.",
+    },
+    consent: {
+      label: "Бисквитки на тази страница",
+      body: (h, t) => `${h} би искал да използва ${t}, за да вижда как се ползва страницата за резервации и да измерва рекламите си. Нищо не се зарежда, ако не приемете, а решението си можете да промените по всяко време от долната част на страницата.`,
+      accept: "Приемам", decline: "Отказвам", settings: "Настройки за бисквитки",
     },
     pay: {
       title: (h) => `Плащане към ${h}`,
