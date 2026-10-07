@@ -41,6 +41,8 @@ export interface ShellStrings {
     mightBeIt: string;
     allHelp: string;
     howUrgent: string;
+    /** Shown when "urgent" is chosen: the phone for a guest-facing emergency. `{phone}` is filled in. */
+    callNow: string;
     whatsHappening: string;
     placeholder: string;
     sending: string;
@@ -88,6 +90,7 @@ export const shellStrings: Translations<ShellStrings> = {
       mightBeIt: "This might be it",
       allHelp: "All help →",
       howUrgent: "How urgent is it?",
+      callNow: "Guests affected right now? Call technical support: {phone} — every day 08:00–22:00.",
       whatsHappening: "What is happening?",
       placeholder: "Booking page returns an error when I press save on rates.",
       sending: "Sending…",
@@ -149,6 +152,7 @@ export const shellStrings: Translations<ShellStrings> = {
       mightBeIt: "Може би това е отговорът",
       allHelp: "Цялата помощ →",
       howUrgent: "Колко е спешно?",
+      callNow: "Засегнати ли са гости в момента? Обадете се на техническа поддръжка: {phone} — всеки ден 08:00–22:00 ч.",
       whatsHappening: "Какво се случва?",
       placeholder: "Страницата за директни резервации дава грешка, когато запазвам цените.",
       sending: "Изпращане…",

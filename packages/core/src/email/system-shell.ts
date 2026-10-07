@@ -1,3 +1,5 @@
+import { REVIO_CONTACT } from "../brand/contact.js";
+
 /**
  * The branded shell for SYSTEM email — invitations, password resets, operational notices.
  *
@@ -68,6 +70,17 @@ export interface SystemEmailBlock {
  * Anything else, or nothing, is English.
  */
 export type SystemEmailLocale = "en" | "bg";
+
+/**
+ * The contact line under every email we send — who to call for what, and where we are. Built from
+ * `REVIO_CONTACT`, so the numbers in a mail can never disagree with the numbers on the site.
+ */
+function contactLines(l: SystemEmailLocale): string[] {
+  const { phones, email } = REVIO_CONTACT;
+  // Non-breaking spaces inside a number: a narrow mail client otherwise wraps "+359 894 306 / 704".
+  const n = (d: string) => d.replace(/ /g, "\u00a0");
+  return [email, `${phones.clients.label[l]}: ${n(phones.clients.display)}`, `${phones.tech.label[l]}: ${n(phones.tech.display)}`];
+}
 
 const SHELL_WORDS: Record<SystemEmailLocale, { paste: string; footer: string }> = {
   en: { paste: "Or paste this into your browser:", footer: "Sent by Revio, the software your property runs on." },
@@ -165,6 +178,11 @@ ${/*
    * the password has not changed, and the password-CHANGED mail deliberately reassures nobody,
    * because its whole job is to alarm you if it was not you.
    */""}${esc(words.footer)}
+<div style="margin-top:6px">${contactLines(locale).map(esc).join("<br>")}</div>
+${/*
+   * Profiles as LINKS only in a mail that already carries one. A mail with no link at all — the
+   * password-changed notice — stays that way, so it can never be copied as a phishing template.
+   */""}${args.blocks.some((x) => x.action) ? `<div style="margin-top:6px">${REVIO_CONTACT.social.map((x) => `<a href="${x.url}" style="color:${MUTED};text-decoration:underline">${x.name}</a>`).join(" · ")}</div>` : ""}
 </div>
 </td></tr>
 
@@ -186,5 +204,7 @@ export function renderSystemEmailText(args: SystemEmailArgs): string {
     else if (b.action) parts.push(`${b.action.label}:`, b.action.url, "");
   }
   parts.push(`— ${args.product ?? "Revio"}`);
+  parts.push(...contactLines(args.locale === "bg" ? "bg" : "en"));
+  if (args.blocks.some((x) => x.action)) parts.push(REVIO_CONTACT.social.map((x) => `${x.name}: ${x.url}`).join("\n"));
   return parts.join("\n");
 }

@@ -11,6 +11,7 @@ export * from "./auth/relative-redirect.js";
 export * from "./auth/turnstile.js";
 export * from "./trials/clock.js";
 export * from "./forms/parse.js";
+export * from "./brand/contact.js";
 export * from "./email/auth-emails.js";
 export * from "./email/trial-emails.js";
 export * from "./email/import-failure.js";

@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
-import { SUPPORT_KINDS, searchHelp, type ProductKey, type SupportKind } from "@revio/core";
+import { REVIO_CONTACT, SUPPORT_KINDS, searchHelp, type ProductKey, type SupportKind } from "@revio/core";
 import { translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { shellStrings } from "./shell-strings";
@@ -202,6 +202,16 @@ export function GetHelp({
                 ))}
               </div>
             </fieldset>
+
+            {/* Urgent means a guest is waiting: the phone is faster than any reply window. The number
+                and the hours are the contract's (Annex 3, critical incidents). */}
+            {kind === "urgent" && (
+              <p className="mt-2 rounded-md bg-warning-50 px-2.5 py-2 text-[12.5px] text-warning-800">
+                {t.callNow.split("{phone}")[0]}
+                <a href={`tel:${REVIO_CONTACT.phones.tech.tel}`} className="whitespace-nowrap font-semibold underline">{REVIO_CONTACT.phones.tech.display}</a>
+                {t.callNow.split("{phone}")[1]}
+              </p>
+            )}
 
             <label className="mt-4 block">
               <span className="mb-1 block text-[12.5px] font-semibold text-ink-700">{t.whatsHappening}</span>

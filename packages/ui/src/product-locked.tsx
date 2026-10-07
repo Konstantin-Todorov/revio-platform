@@ -1,5 +1,5 @@
 import { ArrowRight, Clock, Lock, MailCheck } from "lucide-react";
-import { TRIAL_DAYS, type ProductAccessState } from "@revio/core";
+import { REVIO_CONTACT, TRIAL_DAYS, type ProductAccessState } from "@revio/core";
 import { fill, translate, type Locale } from "./i18n";
 import { productStrings } from "./product-strings";
 
@@ -130,6 +130,11 @@ export function ProductLocked({
           {s.questions}{" "}
           <a href="mailto:support@reviosoft.app" className="font-semibold text-brand-700 hover:underline">
             support@reviosoft.app
+          </a>
+          {" · "}
+          {/* Adding a product is a sales conversation, so it is the customers' number. */}
+          <a href={`tel:${REVIO_CONTACT.phones.clients.tel}`} className="whitespace-nowrap font-semibold text-brand-700 hover:underline">
+            {REVIO_CONTACT.phones.clients.display}
           </a>
         </p>
       </div>
