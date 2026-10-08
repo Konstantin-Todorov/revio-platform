@@ -125,3 +125,28 @@ describe("exportFilename", () => {
     expect(f).toBe("guest-xyz789-2026-08-29.json");
   });
 });
+
+describe("erasure and the email opt-out", () => {
+  it("drops the unsubscribe key with the address it belonged to", async () => {
+    const { planGuestErasure } = await import("./erasure.js");
+    const plan = planGuestErasure(
+      { firstName: "Vera", lastName: "Petrova", email: "v@example.com", phone: null, company: null, specialRequests: null, erasedAt: null } as never,
+      { mergedIntoId: null },
+    );
+    expect(plan.ok && plan.guest.emailPrefsToken).toBeNull();
+  });
+});
+
+describe("buildGuestExport — the email opt-out", () => {
+  it("tells the guest when they unsubscribed, and says nothing when they did not", async () => {
+    const { buildGuestExport } = await import("./erasure.js");
+    const guest = {
+      id: "g2", firstName: "Ana", lastName: "Ivanova", email: "a@example.com", emailIsOtaAlias: false,
+      phone: null, company: null, specialRequests: null, createdAt: new Date("2026-01-15T09:00:00Z"), recognitionOptOut: false,
+    };
+    const out = buildGuestExport({ guest: { ...guest, marketingOptOutAt: new Date("2026-10-08T10:00:00Z") }, reservations: [], notes: [], invoices: [], propertyName: "Villa Sofia" } as never);
+    expect(JSON.stringify(out)).toContain("unsubscribedFromHotelEmailsOn");
+    const none = buildGuestExport({ guest, reservations: [], notes: [], invoices: [], propertyName: "Villa Sofia" } as never);
+    expect(JSON.stringify(none)).not.toContain("unsubscribedFromHotelEmailsOn");
+  });
+});

@@ -20,3 +20,13 @@ export const REVIO_CONTACT = {
     { name: "YouTube", url: "https://www.youtube.com/@reviohotel" },
   ],
 } as const;
+
+/**
+ * The legal entity behind Revio, as a guest-facing page names it — the processor in a hotel's privacy
+ * notice. The marketing site keeps the full record (`revio-websites/src/config/legal.ts`); a change
+ * there is a change here too.
+ */
+export const REVIO_ENTITY = {
+  name: { en: "WEBER BG EOOD", bg: "Уебър БГ ЕООД" },
+  companyNumber: "205090014",
+} as const;

@@ -905,6 +905,10 @@ model Property {
   /// guest accepts.
   bookingGa4Id         String?
   bookingMetaPixelId   String?
+  /// The hotel's own privacy policy, linked beside the booking form and in the page footer. Null =
+  /// the page links the notice RevioDirect generates from the hotel's own details (`/<slug>/privacy`),
+  /// so no hotel collects a guest's name and email with no notice at all (GDPR Art. 13).
+  bookingPrivacyUrl    String?
   // The hero background photograph (BG1). KEYS only — the bytes are in object storage via
   // @revio/storage, same rule as RoomTypePhoto and for the same arithmetic. Null throughout means
   // no photo, which is a designed state rather than a missing one: the preset's own hero still runs.
@@ -1818,6 +1822,17 @@ model Guest {
   // leaving the booking history itself intact — a hotel still has to keep records it is legally
   // required to keep, and "don't greet me by name" is a different request from "erase me".
   recognitionOptOut Boolean   @default(false)
+  /// When the guest said "no more of these" to the hotel's promotional mail — "Before arrival" and
+  /// "After departure" (`GUEST_MARKETING_EMAILS` in core). Null = not opted out. A timestamp rather
+  /// than a boolean because "when did they ask" is the question a complaint turns on.
+  ///
+  /// Narrower than `recognitionOptOut` and narrower than erasure, on purpose: a guest who stops the
+  /// thank-you note still gets their booking confirmation, which is the contract, not marketing.
+  marketingOptOutAt DateTime?
+  /// The key in the "Unsubscribe" link and the List-Unsubscribe header. Minted the first time one of
+  /// those emails goes out; random (24 bytes), never derived from the guest, and it can only ever
+  /// switch that one guest's promotional mail off or back on — there is nothing to escalate to.
+  emailPrefsToken   String?   @unique
   /// When this guest exercised their right to erasure (GDPR Art. 17). The row SURVIVES with the
   /// person removed from it: reservations keep their link so occupancy and revenue history stay
   /// correct, and the tax invoice stays reconcilable to its stay. Set once and never cleared — it is

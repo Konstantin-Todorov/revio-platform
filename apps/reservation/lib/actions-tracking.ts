@@ -33,3 +33,31 @@ export async function saveTrackingTags(fd: FormData): Promise<void> {
   revalidatePath(PAGE);
   redirect(PAGE);
 }
+
+/**
+ * The hotel's own privacy policy for its booking page. Empty clears it, and the page then links the
+ * notice it generates from the hotel's details — never nothing. Only an absolute http(s) address is
+ * stored: this value becomes an href on a public page.
+ */
+export async function savePrivacyUrl(fd: FormData): Promise<void> {
+  await requireCapability("manageSettings");
+  const property = await getProperty();
+  const s = (await i18n()).t(trackingDict);
+  const raw = str(fd, "privacyUrl");
+  let url: string | null = null;
+  if (raw) {
+    try {
+      const u = new URL(raw);
+      if (u.protocol !== "https:" && u.protocol !== "http:") throw new Error("scheme");
+      url = u.toString();
+    } catch {
+      await setFlash("error", s.errors.privacyUrl);
+      redirect(PAGE);
+    }
+  }
+  await prisma.property.update({ where: { id: property.id }, data: { bookingPrivacyUrl: url } });
+  await logAudit(property.id, property.tenantId, { entity: "Booking engine", field: "privacy policy", newValue: url ?? "generated notice" });
+  await setFlash("success", s.privacy.saved);
+  revalidatePath(PAGE);
+  redirect(PAGE);
+}

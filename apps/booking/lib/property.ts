@@ -82,6 +82,21 @@ export interface PublicProperty {
    * platform-test mode (`STRIPE_TEST_CHARGE_PLATFORM`), where the sandbox platform stands in for it.
    */
   paymentAccountId: string | null;
+  /**
+   * Who the guest is actually contracting with — the hotel's legal entity, from its invoicing
+   * identity (RevioPMS → Configuration / first-run setup). A trading name ("Hotel Sofia") is
+   * routinely not the company that takes the money, and a distance sale must name the trader.
+   * Null fields are simply not shown; nothing here is invented.
+   */
+  legal: { name: string | null; vatId: string | null; address: string | null };
+  /**
+   * Where the privacy notice lives: the hotel's own policy when it gave one, otherwise the notice this
+   * app generates from the hotel's details. Never null — a page that collects a name, an email and a
+   * phone number always links one (GDPR Art. 13).
+   */
+  privacyUrl: string;
+  /** True when `privacyUrl` is the hotel's own page rather than the generated notice. */
+  privacyIsOwn: boolean;
 }
 
 /**
@@ -111,7 +126,8 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
       stripeAccountId: true,
       bookingPreset: true, bookingBrandColor: true, bookingFont: true, bookingLogoUrl: true,
       bookingHeadline: true, bookingSubheadline: true, bookingShowTrust: true,
-      bookingGa4Id: true, bookingMetaPixelId: true,
+      bookingGa4Id: true, bookingMetaPixelId: true, bookingPrivacyUrl: true,
+      defaults: { select: { invoiceIssuerName: true, invoiceVatId: true, invoiceAddress: true } },
       bookingHeroKey: true, bookingHeroWidth: true, bookingHeroHeight: true,
       bookingHeroLuminance: true, bookingHeroFocalY: true, bookingHeroOverlay: true,
       tenant: { select: { status: true, hasReservation: true } },
@@ -179,8 +195,30 @@ export const getPublicProperty = cache(async (slug: string): Promise<PublicPrope
     paymentReady:
       (property.stripeChargesEnabled && !!property.stripeAccountId && !isMockAccount(property.stripeAccountId) && guestPaymentsConfigured()) || testChargesOnPlatform(),
     paymentAccountId: property.stripeChargesEnabled && property.stripeAccountId && !isMockAccount(property.stripeAccountId) ? property.stripeAccountId : null,
+    legal: {
+      name: property.defaults?.invoiceIssuerName?.trim() || null,
+      vatId: property.defaults?.invoiceVatId?.trim() || null,
+      address: property.defaults?.invoiceAddress?.trim() || null,
+    },
+    // Re-checked on the way out, like the tags: only an absolute http(s) URL becomes a link.
+    ...(() => {
+      const own = safeHttpUrl(property.bookingPrivacyUrl);
+      return { privacyUrl: own ?? `/${property.publicSlug}/privacy`, privacyIsOwn: own !== null };
+    })(),
   };
 });
+
+/** An absolute http(s) URL, or null. A stored value that is anything else must never become an href. */
+export function safeHttpUrl(raw: string | null | undefined): string | null {
+  const v = raw?.trim();
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "https:" || u.protocol === "http:" ? u.toString() : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The hotel's logo: its own if it uploaded one for this page, otherwise the email one.

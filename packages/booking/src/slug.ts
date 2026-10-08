@@ -9,7 +9,7 @@
 
 /** Reserved because they are (or will be) our own routes, or are confusable with them. */
 const RESERVED = new Set([
-  "api", "app", "admin", "assets", "book", "booking", "dashboard", "health", "help", "images",
+  "api", "app", "admin", "assets", "book", "booking", "dashboard", "email", "health", "help", "images",
   "internal", "login", "logout", "operator", "pms", "public", "revio", "static", "status",
   "support", "www",
 ]);

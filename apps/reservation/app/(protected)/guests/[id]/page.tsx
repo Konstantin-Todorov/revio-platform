@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { WrongProperty } from "@/components/shell/WrongProperty";
 import { findGuestElsewhere } from "@/lib/elsewhere";
 import { findDuplicateGuests, getGuestDetail } from "@/lib/data";
-import { setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
+import { setGuestMarketingOptOut, setGuestRecognitionOptOut, updateGuest } from "@/lib/actions-reservations";
 import { GuestNotes, type GuestNoteRow } from "@/components/guests/GuestNotes";
 import { DuplicateGuests } from "@/components/guests/DuplicateGuests";
 import { DataRights } from "@/components/guests/DataRights";
@@ -273,6 +273,32 @@ export default async function GuestDetailPage({
             <span>
               <span className="font-semibold text-ink-900">{t.optOut}</span>
               <span className="mt-0.5 block text-[12px] text-ink-500">{t.optOutBody}</span>
+            </span>
+          </label>
+          <button
+            type="submit"
+            className="rounded-md border border-surface-border bg-white px-3 py-1.5 text-[12.5px] font-semibold text-ink-700 transition-colors hover:bg-surface-muted"
+          >
+            {t.save}
+          </button>
+        </form>
+        <form action={setGuestMarketingOptOut} className="flex flex-wrap items-center justify-between gap-3 border-t border-surface-border px-4 py-3.5">
+          <input type="hidden" name="guestId" value={guest.id} />
+          <label className="flex cursor-pointer items-start gap-2.5 text-[13px] text-ink-700">
+            <input
+              type="checkbox"
+              name="marketingOptOut"
+              defaultChecked={guest.marketingOptOutAt !== null}
+              className="mt-0.5 h-4 w-4 rounded border-surface-border text-brand-600"
+            />
+            <span>
+              <span className="font-semibold text-ink-900">{t.marketingOptOut}</span>
+              <span className="mt-0.5 block text-[12px] text-ink-500">{t.marketingOptOutBody}</span>
+              {guest.marketingOptOutAt && (
+                <span className="mt-0.5 block text-[12px] font-semibold text-ink-700">
+                  {t.marketingOptOutSince(guest.marketingOptOutAt.toISOString().slice(0, 10))}
+                </span>
+              )}
             </span>
           </label>
           <button

@@ -142,6 +142,7 @@ export default async function BookPage({
 
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
+            privacy={{ hotel: property.name, url: property.privacyUrl, external: property.privacyIsOwn }}
             stay={{ slug, checkIn, checkOut, guests, ages: childAges.join(","), promo, roomTypeId, ratePlanId, holdId: hold.id }}
             cancellationPolicy={plan.cancellationPolicy}
             termsDetails={termsDetails}

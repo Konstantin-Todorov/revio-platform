@@ -822,6 +822,23 @@ Status: `CLAIMED` · `DONE` · `BLOCKED` · `ABANDONED` (say why).
 
 ---
 
+### 2026-10-08 · Claude · DONE · Guest-facing legal hygiene (unsubscribe, trader identity, privacy notice, 18+, DSA)
+**Founder asked for a legal-risk pass on the guest-facing surfaces; four gaps found, fixing all four.**
+Files: `packages/db/prisma/schema.prisma` (+ migration), `packages/core/src/email/templates.ts`,
+`packages/email/src/{engine,transport}.ts`, `packages/booking/src/slug.ts`,
+`apps/reservation/app/api/jobs/guest-mail/route.ts`, CRS guest privacy + Booking Engine settings,
+`apps/booking/{app/email,app/api/unsubscribe,app/[slug]/privacy,components/PropertyFooter.tsx,components/BookingForm.tsx,lib/property.ts,lib/i18n/guest.ts}`.
+Notes: (1) "Before arrival"/"After departure" are promotional and had no opt-out — adds
+`Guest.marketingOptOutAt` + a per-guest token, footer link, RFC 8058 one-click headers, and the job
+skips opted-out guests. (2) RevioDirect showed no legal entity of the hotel and no privacy notice at
+the point of collection. (3) 18+ in the acceptance line. (4) DSA notice contact on the booking page.
+Result: migration `20261008120000` (additive, nullable). The engine REFUSES a promotional email sent
+without `unsubscribe` — the next job someone writes cannot forget it. GET on `/email/<token>` changes
+nothing (link scanners); the button and the RFC 8058 POST do. `email` is now a reserved slug. Verified
+locally end to end: page → click → `marketingOptOutAt` set; one-click POST 200; GET on the API 405;
+footer shows the hotel's legal entity from `PropertyDefaults.invoice*`; generated notice at
+`/<slug>/privacy` unless RevioCRS → Booking Engine → Analytics & ads has the hotel's own URL.
+
 ### 2026-09-12 · Claude · DONE · The shape of the day, above the reservation list
 **P2 item from `IDEAS-1CLUB-2026-09.md`: segment tabs with live counts.**
 Files: `apps/reservation/lib/{segments.ts,segments.test.ts,data.ts}`,

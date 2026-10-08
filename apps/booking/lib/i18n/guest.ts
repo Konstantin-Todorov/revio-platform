@@ -61,12 +61,43 @@ export interface GuestStrings {
   footer: {
     times: (checkIn: string, checkOut: string) => string; allIn: string;
     contact: string; stay: string; help: string; myBooking: string; directions: string; securePay: string; directBenefit: string;
+    /** "Operated by Хотел София ЕООД" — the trader a distance sale must name. */
+    operatedBy: (legalName: string) => string;
+    vatId: (id: string) => string;
+    privacy: string;
+    /** DSA Art. 16: anyone can flag content on the page as illegal. */
+    report: string;
   };
   /**
    * The consent banner — shown only when the hotel has added its own Google Analytics or Meta pixel.
    * Accept and Decline carry equal weight: a "Decline" hidden behind a second click is not consent.
    */
   consent: { label: string; body: (hotel: string, tools: string) => string; accept: string; decline: string; settings: string };
+  /** The page behind the "Unsubscribe" link in the hotel's promotional emails. */
+  prefs: {
+    title: string;
+    body: (hotel: string) => string;
+    unsubscribe: string;
+    doneTitle: string; doneBody: (hotel: string) => string;
+    resubscribe: string;
+    backTitle: string; backBody: (hotel: string) => string;
+    unknownTitle: string; unknownBody: string;
+  };
+  /** The privacy notice RevioDirect generates when the hotel has not linked its own. */
+  privacyNotice: {
+    title: string;
+    intro: (hotel: string) => string;
+    controllerTitle: string; controllerBody: (who: string) => string;
+    whatTitle: string; whatBody: string;
+    whyTitle: string; whyBody: string;
+    whoTitle: string; whoBody: (processor: string) => string;
+    keepTitle: string; keepBody: string;
+    marketingTitle: string; marketingBody: string;
+    rightsTitle: string; rightsBody: (contact: string) => string;
+    complaintTitle: string; complaintBody: string;
+    cookiesTitle: string; cookiesBody: string;
+    back: string;
+  };
   pay: {
     title: (hotel: string) => string; lead: string; amount: string; forStay: string;
     pay: (amount: string) => string; paying: string;
@@ -174,6 +205,8 @@ export interface GuestStrings {
     cancellation: string;
     terms: string;
     accept: string; acceptCard: string;
+    /** Under the acceptance box: what the details are for, and where the notice is. */
+    privacyNote: (hotel: string) => string; privacyLink: string;
     confirming: string; sending: string; confirm: string; request: string;
     confirmHint: string; requestHint: string;
     holdExpired: string;
@@ -337,11 +370,50 @@ export const guest: Translations<GuestStrings> = {
       contact: "Contact", stay: "Your stay", help: "Help", myBooking: "Find, change or cancel my booking",
       directions: "Directions", securePay: "Card payments are processed securely by Stripe — we never see your card number.",
       directBenefit: "Booking here, you book directly with the hotel.",
+      operatedBy: (n) => `Operated by ${n}`,
+      vatId: (id) => `Company / VAT no. ${id}`,
+      privacy: "Privacy notice",
+      report: "Report illegal content",
     },
     consent: {
       label: "Cookies on this page",
       body: (h, t) => `${h} would like to use ${t} to see how its booking page is used and to measure its ads. Nothing is loaded unless you accept, and you can change your mind any time in the footer.`,
       accept: "Accept", decline: "Decline", settings: "Cookie settings",
+    },
+    prefs: {
+      title: "Email preferences",
+      body: (h) => `Stop the welcome notes and thank-you emails from ${h}? You will still receive anything about a booking you make — confirmations, changes and receipts.`,
+      unsubscribe: "Unsubscribe",
+      doneTitle: "You are unsubscribed",
+      doneBody: (h) => `${h} will not send you these emails again. Messages about your bookings still arrive.`,
+      resubscribe: "I changed my mind — keep sending them",
+      backTitle: "You are subscribed again",
+      backBody: (h) => `${h} may send you a note before your next stay and a thank-you after it.`,
+      unknownTitle: "This link is no longer valid",
+      unknownBody: "It may have been sent before your details were removed. Nothing more will be sent to you from it.",
+    },
+    privacyNotice: {
+      title: "Privacy notice",
+      intro: (h) => `How ${h} uses the details you give on this booking page.`,
+      controllerTitle: "Who is responsible",
+      controllerBody: (who) => `${who} is the controller of your personal data. Contact the hotel with any question about it using the details at the bottom of this page.`,
+      whatTitle: "What we collect",
+      whatBody: "Your name, email address and phone number, the dates, room and guests of your stay, any request you write to us, and — when you pay online — a payment reference and the last four digits of your card. Your full card number never reaches the hotel or this page.",
+      whyTitle: "Why",
+      whyBody: "To make, change and cancel your booking and to take your payment (performing the contract you ask for, GDPR Art. 6(1)(b)); to keep the accounting and registration records the law requires (Art. 6(1)(c)); and to send you a note before your stay and a thank-you after it, which you can stop at any time (Art. 6(1)(f)).",
+      whoTitle: "Who else sees it",
+      whoBody: (p) => `${p} runs this booking page and the hotel's reservation system on the hotel's behalf, under a data processing agreement. Card payments are processed by Stripe. If you booked through an online travel agency, that agency has its own notice.`,
+      keepTitle: "How long",
+      keepBody: "For as long as your booking needs, then as long as tax and registration law requires the hotel to keep its records (in Bulgaria, typically ten years for accounting documents). Details kept only for convenience are removed on request.",
+      marketingTitle: "Emails you can stop",
+      marketingBody: "Every welcome note and thank-you email has an unsubscribe link at the bottom. Booking confirmations, changes and receipts are not marketing and are always sent.",
+      rightsTitle: "Your rights",
+      rightsBody: (c) => `You can ask for a copy of your data, to correct it, to erase it where the law allows, to restrict or object to its use, and to receive it in a portable form. Write to ${c}.`,
+      complaintTitle: "Complaints",
+      complaintBody: "You can complain to your local data protection authority — in Bulgaria, the Commission for Personal Data Protection (www.cpdp.bg).",
+      cookiesTitle: "Cookies",
+      cookiesBody: "This page uses one functional cookie for a day so that one visit counts as one visit, and a language cookie if you choose a language. Analytics or advertising tags load only if you accept them in the cookie banner.",
+      back: "Back to the booking page",
     },
     pay: {
       title: (h) => `Payment to ${h}`,
@@ -491,8 +563,10 @@ export const guest: Translations<GuestStrings> = {
       requestBody: "Your room is held while they check, and you’ll get an email as soon as it’s confirmed. Nothing is charged now, and nothing is charged online at all — you settle the whole amount at the hotel.",
       cancellation: "Cancellation:",
       terms: "Payment and cancellation",
-      accept: "I accept the booking conditions and the cancellation policy above",
+      accept: "I am 18 or older and accept the booking conditions and the cancellation policy above",
       acceptCard: ", and I understand my card is used as a guarantee",
+      privacyNote: (h) => `${h} uses your details to make and manage this booking.`,
+      privacyLink: "Privacy notice",
       confirming: "Confirming…", sending: "Sending…", confirm: "Confirm booking", request: "Request this room",
       confirmHint: "You’ll get a confirmation by email straight away.",
       requestHint: "You’ll get an email the moment the hotel confirms.",
@@ -674,11 +748,50 @@ export const guest: Translations<GuestStrings> = {
       contact: "Контакти", stay: "Вашият престой", help: "Помощ", myBooking: "Намерете, променете или откажете резервация",
       directions: "Упътване", securePay: "Плащанията с карта се обработват сигурно от Stripe — ние не виждаме номера на картата Ви.",
       directBenefit: "Резервирайки тук, резервирате директно с хотела.",
+      operatedBy: (n) => `Търговец: ${n}`,
+      vatId: (id) => `ЕИК / ДДС № ${id}`,
+      privacy: "Поверителност",
+      report: "Сигнал за незаконно съдържание",
     },
     consent: {
       label: "Бисквитки на тази страница",
       body: (h, t) => `${h} би искал да използва ${t}, за да вижда как се ползва страницата за резервации и да измерва рекламите си. Нищо не се зарежда, ако не приемете, а решението си можете да промените по всяко време от долната част на страницата.`,
       accept: "Приемам", decline: "Отказвам", settings: "Настройки за бисквитки",
+    },
+    prefs: {
+      title: "Настройки за имейли",
+      body: (h) => `Да спрем ли приветствените писма и благодарствените имейли от ${h}? Ще продължите да получавате всичко за ваша резервация — потвърждения, промени и сметки.`,
+      unsubscribe: "Отписване",
+      doneTitle: "Отписахте се",
+      doneBody: (h) => `${h} няма да Ви изпраща повече такива писма. Съобщенията за резервациите Ви ще продължат да пристигат.`,
+      resubscribe: "Размислих — продължете да ги изпращате",
+      backTitle: "Отново сте абонирани",
+      backBody: (h) => `${h} може да Ви пише преди следващия Ви престой и да Ви благодари след него.`,
+      unknownTitle: "Тази връзка вече не е валидна",
+      unknownBody: "Възможно е да е изпратена преди данните Ви да бъдат изтрити. Няма да получавате повече писма чрез нея.",
+    },
+    privacyNotice: {
+      title: "Информация за поверителност",
+      intro: (h) => `Как ${h} използва данните, които въвеждате на тази страница за резервации.`,
+      controllerTitle: "Кой отговаря",
+      controllerBody: (who) => `${who} е администратор на личните Ви данни. За въпроси се свържете с хотела на данните в долната част на страницата.`,
+      whatTitle: "Какво събираме",
+      whatBody: "Име, имейл и телефон, датите, стаята и гостите на престоя, всяко пожелание, което ни напишете, и — при онлайн плащане — референция на плащането и последните четири цифри на картата. Пълният номер на картата Ви не достига нито до хотела, нито до тази страница.",
+      whyTitle: "За какво",
+      whyBody: "За да направим, променим и откажем резервацията Ви и да приемем плащането (изпълнение на договора, чл. 6, пар. 1, б. „б“ от ОРЗД); за счетоводните и регистрационните записи, които законът изисква (чл. 6, пар. 1, б. „в“); и за да Ви пишем преди престоя и да Ви благодарим след него, което можете да спрете по всяко време (чл. 6, пар. 1, б. „е“).",
+      whoTitle: "Кой още ги вижда",
+      whoBody: (p) => `${p} поддържа тази страница и резервационната система на хотела от негово име, по договор за обработване на лични данни. Плащанията с карта се обработват от Stripe. Ако сте резервирали чрез онлайн агенция, тя има собствена политика.`,
+      keepTitle: "Колко дълго",
+      keepBody: "Докато е нужно за резервацията, а след това толкова, колкото данъчното и регистрационното законодателство изисква хотелът да пази записите си (в България обикновено десет години за счетоводни документи). Данните, пазени само за удобство, се изтриват при поискване.",
+      marketingTitle: "Писма, които можете да спрете",
+      marketingBody: "Всяко приветствено и благодарствено писмо има връзка за отписване най-долу. Потвържденията, промените и сметките не са реклама и се изпращат винаги.",
+      rightsTitle: "Вашите права",
+      rightsBody: (c) => `Можете да поискате копие на данните си, да ги коригирате, да бъдат изтрити, когато законът позволява, да ограничите или да възразите срещу обработването им и да ги получите в преносим формат. Пишете на ${c}.`,
+      complaintTitle: "Жалби",
+      complaintBody: "Можете да подадете жалба до Комисията за защита на личните данни (www.cpdp.bg).",
+      cookiesTitle: "Бисквитки",
+      cookiesBody: "Страницата използва една функционална бисквитка за един ден, за да се брои едно посещение като едно, и бисквитка за език, ако изберете език. Инструменти за анализ или реклама се зареждат само ако ги приемете в банера за бисквитки.",
+      back: "Към страницата за резервации",
     },
     pay: {
       title: (h) => `Плащане към ${h}`,
@@ -828,7 +941,9 @@ export const guest: Translations<GuestStrings> = {
       requestBody: "Стаята Ви е задържана, докато хотелът провери, и ще получите имейл веднага щом бъде потвърдена. Сега нищо не се плаща, а онлайн изобщо не се плаща — цялата сума плащате в хотела.",
       cancellation: "Анулиране:",
       terms: "Плащане и анулиране",
-      accept: "Приемам условията за резервация и правилата за анулиране по-горе",
+      accept: "Навършил/а съм 18 години и приемам условията за резервация и правилата за анулиране по-горе",
+      privacyNote: (h) => `${h} използва данните Ви, за да направи и обслужва тази резервация.`,
+      privacyLink: "Информация за поверителност",
       acceptCard: " и разбирам, че картата ми се използва като гаранция",
       confirming: "Потвърждаваме…", sending: "Изпращаме…", confirm: "Потвърди резервацията", request: "Изпрати заявка",
       confirmHint: "Веднага ще получите потвърждение по имейл.",

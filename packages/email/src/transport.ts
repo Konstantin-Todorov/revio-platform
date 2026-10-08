@@ -100,7 +100,7 @@ function resolveFrom(fromName?: string | null): string {
   return `${safeName} <${address}>`;
 }
 
-export async function sendEmail({ to, subject, text, html, fromName, replyTo, attachments }: {
+export async function sendEmail({ to, subject, text, html, fromName, replyTo, attachments, headers }: {
   to: string[];
   subject: string;
   text: string;
@@ -129,6 +129,13 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
    * is for a ~12KB HTML invoice, not for photographs.
    */
   attachments?: { filename: string; content: string }[] | null;
+  /**
+   * Extra message headers. Today only `List-Unsubscribe` / `List-Unsubscribe-Post` (RFC 2369 /
+   * RFC 8058) on a hotel's promotional guest mail: Gmail and Yahoo require one-click unsubscribe from
+   * bulk senders, and every hotel sends through OUR signed domain — one hotel's spam complaints are
+   * every hotel's deliverability problem.
+   */
+  headers?: Record<string, string> | null;
 }): Promise<EmailResult> {
   /*
    * ⚠️ Before anything else, including the mock branch: an address that cannot receive mail is not
@@ -160,6 +167,7 @@ export async function sendEmail({ to, subject, text, html, fromName, replyTo, at
         text,
         ...(html?.trim() ? { html } : {}),
         ...(replyTo?.trim() ? { reply_to: replyTo.trim() } : {}),
+        ...(headers && Object.keys(headers).length ? { headers } : {}),
         // Resend takes base64. Encoding here rather than at the call site keeps every caller passing
         // ordinary text and keeps the one place that knows the wire format the one that produces it.
         ...(attachments?.length

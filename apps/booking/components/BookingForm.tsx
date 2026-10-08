@@ -51,7 +51,10 @@ export function BookingForm({
   base,
   group = null,
   fixedPayNowMinor,
+  privacy,
 }: {
+  /** The hotel's name and its privacy notice, stated beside the box the guest ticks (GDPR Art. 13). */
+  privacy: { hotel: string; url: string; external: boolean };
   /** Several rooms: the slots, their picks and their holds, posted with the form. */
   group?: { rooms: string; sel: string; holds: string } | null;
   /** Several rooms: what leaves the card today, summed on the server from each room's own terms. */
@@ -291,6 +294,17 @@ export function BookingForm({
             {paymentReady ? (payNowMinor > 0 ? s.acceptPay : s.acceptCard) : ""}.
           </span>
         </label>
+        <p className="mt-2 pl-[26px] text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
+          {s.privacyNote(privacy.hotel)}{" "}
+          <a
+            href={privacy.url}
+            target="_blank"
+            rel={privacy.external ? "noopener noreferrer" : undefined}
+            className="link-quiet font-semibold underline"
+          >
+            {s.privacyLink}
+          </a>
+        </p>
       </section>
 
       {state?.error && (

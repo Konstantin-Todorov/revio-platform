@@ -10,8 +10,15 @@ export interface TrackingStrings {
   consentTitle: string; consentBody: string;
   purchaseTitle: string; purchaseBody: string;
   state: { off: string; on: (what: string) => string };
-  errors: { ga4: string; meta: string };
+  errors: { ga4: string; meta: string; privacyUrl: string };
   saved: string;
+  /** The hotel's own privacy policy, linked beside the booking form and in the footer. */
+  privacy: {
+    title: string; subtitle: string;
+    url: string; urlHint: string; urlPlaceholder: string;
+    usingOwn: string; usingGenerated: string; viewGenerated: string;
+    saved: string;
+  };
 }
 
 export const tracking: Translations<TrackingStrings> = {
@@ -27,8 +34,15 @@ export const tracking: Translations<TrackingStrings> = {
     purchaseTitle: "Bookings are counted",
     purchaseBody: "When a guest who accepted completes a booking, your tags receive one purchase event: the booking reference, the total and the currency. Never the guest's name, email or phone.",
     state: { off: "Nothing is loaded on your booking page and no consent banner is shown.", on: (w) => `On your booking page after consent: ${w}.` },
-    errors: { ga4: "That is not a Google Analytics 4 Measurement ID — it starts with G-, e.g. G-AB12CD34EF.", meta: "A Meta pixel ID is digits only, e.g. 123456789012345." },
+    errors: { ga4: "That is not a Google Analytics 4 Measurement ID — it starts with G-, e.g. G-AB12CD34EF.", meta: "A Meta pixel ID is digits only, e.g. 123456789012345.", privacyUrl: "That is not a web address — paste the full link, starting with https://." },
     saved: "Saved. Your booking page now asks guests before loading these.",
+    privacy: {
+      title: "Privacy notice",
+      subtitle: "Your booking page asks guests for their name, email and phone, so it must say what you do with them. It links a privacy notice beside the booking form and in the footer.",
+      url: "Your own privacy policy (optional)", urlHint: "Leave empty to use the notice we generate from your company details. Paste a link if your website has its own policy.", urlPlaceholder: "https://your-hotel.com/privacy",
+      usingOwn: "Guests see your own policy.", usingGenerated: "Guests see the notice generated from your company details.", viewGenerated: "View it",
+      saved: "Saved. Your booking page links this privacy notice.",
+    },
   },
   bg: {
     nav: "Анализи и реклама", navBlurb: "Вашите Google Analytics и Meta pixel на страницата за резервации",
@@ -42,7 +56,14 @@ export const tracking: Translations<TrackingStrings> = {
     purchaseTitle: "Резервациите се отчитат",
     purchaseBody: "Когато гост, който е приел, завърши резервация, кодовете Ви получават едно събитие „покупка“: номера на резервацията, сумата и валутата. Никога името, имейла или телефона на госта.",
     state: { off: "На страницата за резервации не се зарежда нищо и не се показва банер за бисквитки.", on: (w) => `На страницата за резервации след съгласие: ${w}.` },
-    errors: { ga4: "Това не е Measurement ID на Google Analytics 4 — започва с G-, например G-AB12CD34EF.", meta: "Meta pixel ID е само цифри, например 123456789012345." },
+    errors: { ga4: "Това не е Measurement ID на Google Analytics 4 — започва с G-, например G-AB12CD34EF.", meta: "Meta pixel ID е само цифри, например 123456789012345.", privacyUrl: "Това не е уеб адрес — поставете пълната връзка, започваща с https://." },
     saved: "Записано. Страницата за резервации вече пита гостите, преди да ги зареди.",
+    privacy: {
+      title: "Информация за поверителност",
+      subtitle: "Страницата за резервации иска от гостите име, имейл и телефон, затова трябва да казва какво правите с тях. Тя показва връзка към информацията за поверителност до формата и в долната част на страницата.",
+      url: "Ваша собствена политика (по избор)", urlHint: "Оставете празно, за да използвате информацията, която генерираме от данните на фирмата Ви. Поставете връзка, ако сайтът Ви има собствена политика.", urlPlaceholder: "https://вашият-хотел.bg/poveritelnost",
+      usingOwn: "Гостите виждат Вашата собствена политика.", usingGenerated: "Гостите виждат информацията, генерирана от данните на фирмата Ви.", viewGenerated: "Вижте я",
+      saved: "Записано. Страницата за резервации показва тази информация за поверителност.",
+    },
   },
 };

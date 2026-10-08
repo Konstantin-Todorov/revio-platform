@@ -86,6 +86,7 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
 
         <div className="mt-7 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_21rem] lg:items-start">
           <BookingForm
+            privacy={{ hotel: property.name, url: property.privacyUrl, external: property.privacyIsOwn }}
             stay={{
               slug, checkIn, checkOut, guests: first.party.adults, ages: first.party.childAges.join(","), promo,
               roomTypeId: first.pick.roomTypeId, ratePlanId: first.pick.ratePlanId, holdId: holds[0]!.id,

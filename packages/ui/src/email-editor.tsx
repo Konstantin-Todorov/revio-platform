@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Check, Info, RotateCcw } from "lucide-react";
-import { renderEmail, type EmailBrand, type EmailDetail } from "@revio/core";
+import { GUEST_MARKETING_EMAILS, renderEmail, unsubscribeFooter, type EmailBrand, type EmailDetail } from "@revio/core";
 import { fill, translate } from "./i18n";
 import { useLocale } from "./i18n-context";
 import { guestEmailsStrings } from "./guest-emails-strings";
@@ -58,8 +58,16 @@ export function EmailEditor({
   const localeLabel = locales.find((l) => l.key === locale)?.label ?? locale;
 
   const preview = useMemo(
-    () => renderEmail({ subject, body, brand, vars: variables, details, preheader: description }),
-    [subject, body, brand, variables, details, description],
+    () =>
+      renderEmail({
+        subject, body, brand, vars: variables, details, preheader: description,
+        // A promotional email always goes out with its opt-out line, so the preview shows it too —
+        // a hotel should never be surprised by a footer it did not write.
+        ...(GUEST_MARKETING_EMAILS.has(templateKey)
+          ? { unsubscribe: { ...unsubscribeFooter(locale, { propertyName: brand.propertyName }), url: "#" } }
+          : {}),
+      }),
+    [subject, body, brand, variables, details, description, templateKey, locale],
   );
 
   function save() {

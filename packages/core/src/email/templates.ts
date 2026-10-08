@@ -420,6 +420,12 @@ export function renderEmail(args: {
    * a hotel rewriting it would quietly change what the average means.
    */
   rating?: EmailRatingAsk | null;
+  /**
+   * The opt-out line for a promotional email (`GUEST_MARKETING_EMAILS`) — who sent it, why the guest
+   * is receiving it, and a working link. Its own block outside the editable body, so a hotel
+   * rewriting the template can never delete the way out.
+   */
+  unsubscribe?: { notice: string; label: string; url: string } | null;
   preheader?: string;
 }): RenderedEmail {
   const vars = { propertyName: args.brand.propertyName, ...args.vars };
@@ -469,6 +475,7 @@ export function renderEmail(args: {
     text += `\n\n${args.rating.question}\n\n${rows}`;
     if (args.rating.hint) text += `\n\n${args.rating.hint}`;
   }
+  if (args.unsubscribe) text += `\n\n--\n${args.unsubscribe.notice}\n${args.unsubscribe.label}: ${args.unsubscribe.url}`;
   text = text.replace(/\n{3,}/g, "\n\n").trim();
 
   // ---- per-theme visual treatment -----------------------------------------
@@ -613,6 +620,12 @@ ${args.rating.hint ? `<tr><td colspan="5" style="padding-top:6px;font-size:11.5p
 </td></tr>`
     : "";
 
+  const unsubscribeRow = args.unsubscribe
+    ? `<tr><td style="padding:${footer ? "0" : "20px"} ${T.pad} 28px;text-align:${T.mastheadAlign}">
+<p style="margin:0;color:#8A93A0;font-size:11.5px;line-height:1.6;font-family:${SANS}">${escapeHtml(args.unsubscribe.notice)}<br><a href="${escapeHtml(args.unsubscribe.url)}" style="color:#67707E;text-decoration:underline">${escapeHtml(args.unsubscribe.label)}</a></p>
+</td></tr>`
+    : "";
+
   const pre = args.preheader ? fillPlaceholders(args.preheader, vars) : "";
 
   const html = `<!doctype html>
@@ -634,6 +647,7 @@ ${pre ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${esca
       ${ctaBlock}
     </td></tr>
     ${footer}
+    ${unsubscribeRow}
   </table>
   <p style="margin:16px 0 0;font-size:11px;color:#A3AAB5;font-family:${SANS}">Sent by ${escapeHtml(args.brand.propertyName)}</p>
 </td></tr>
@@ -909,6 +923,37 @@ export const EMAIL_SENT_BY: Record<string, readonly EmailSender[]> = {
  * guests on a decision nobody made. Every other email answers something that just happened.
  */
 export const EMAIL_OPT_IN: ReadonlySet<string> = new Set(["pre_arrival", "post_stay"]);
+
+/**
+ * The guest emails that are promotional rather than transactional, and so must carry an opt-out.
+ *
+ * "Before arrival" offers transfers and upgrades; "After departure" asks for a review and a direct
+ * rebooking. Under the ePrivacy rule for existing customers (Art. 13(2) of Directive 2002/58/EC, in
+ * Bulgaria чл. 6 ЗЕТ) a hotel may send those to a past guest only if EVERY message offers a free,
+ * simple way to refuse — and a hotel can rewrite the wording into a straight promotion at any time.
+ * A confirmation, a change or a receipt is the contract itself and never carries one: a guest who
+ * unsubscribes must still be told their booking moved.
+ *
+ * Deliberately the same set as `EMAIL_OPT_IN` today, but a separate constant: one is "the hotel
+ * must switch it on", the other is "the guest must be able to switch it off", and a future email
+ * can be either without being both.
+ */
+export const GUEST_MARKETING_EMAILS: ReadonlySet<string> = new Set(["pre_arrival", "post_stay"]);
+
+/** The opt-out line under a promotional guest email, in the guest's language. */
+export function unsubscribeFooter(locale: string, args: { propertyName: string; sender?: string | null }): { notice: string; label: string } {
+  const who = args.sender?.trim() || args.propertyName;
+  if (locale === "bg") {
+    return {
+      notice: `Получавате това писмо, защото сте отсядали или имате резервация в ${args.propertyName}. Изпраща: ${who}.`,
+      label: "Не желая повече такива писма",
+    };
+  }
+  return {
+    notice: `You are receiving this because you stayed or have a booking at ${args.propertyName}. Sent by ${who}.`,
+    label: "Unsubscribe from these emails",
+  };
+}
 
 export type EmailStatus =
   | { kind: "auto" }

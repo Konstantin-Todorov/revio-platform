@@ -67,6 +67,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       specialRequests: guest.specialRequests,
       createdAt: guest.createdAt,
       recognitionOptOut: guest.recognitionOptOut,
+      marketingOptOutAt: guest.marketingOptOutAt,
       erasedAt: guest.erasedAt,
     },
     reservations: guest.reservations.map((r) => {

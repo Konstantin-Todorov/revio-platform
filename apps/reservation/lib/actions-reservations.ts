@@ -548,6 +548,47 @@ export async function setGuestRecognitionOptOut(fd: FormData): Promise<void> {
   redirect(`/guests/${guestId}?tab=privacy`);
 }
 
+/**
+ * The guest's opt-out from the hotel's promotional mail ("Before arrival" / "After departure").
+ *
+ * The same column the "Unsubscribe" link in those emails writes, so a guest who rings the desk and
+ * a guest who clicks the link end up in the same state. Audited like recognition, for the same
+ * reason: "why did this guest stop getting our emails?" will be asked, and "when did they ask us
+ * to stop?" is the question a complaint turns on.
+ */
+export async function setGuestMarketingOptOut(fd: FormData): Promise<void> {
+  await requireCapability("manageReservations");
+  const property = await getProperty();
+  const session = await getSession();
+  if (!session) redirect("/logout");
+  const guestId = str(fd, "guestId");
+  const optOut = fd.get("marketingOptOut") === "on";
+  const guest = await prisma.guest.findFirst({ where: { id: guestId, propertyId: property.id } });
+  if (!guest) redirect("/guests");
+  const was = guest!.marketingOptOutAt !== null;
+
+  if (was !== optOut) {
+    await withTenantTransaction(guest!.tenantId, async (tx) => {
+      // Keep the first date: re-ticking a box that is already ticked must not move "when they asked".
+      await tx.guest.update({ where: { id: guestId }, data: { marketingOptOutAt: optOut ? new Date() : null } });
+      await tx.auditEntry.create({
+        data: {
+          tenantId: guest!.tenantId,
+          propertyId: property.id,
+          userId: session!.userId,
+          entity: `Guest · ${guest!.firstName} ${guest!.lastName}`,
+          field: "marketingOptOut",
+          oldValue: String(was),
+          newValue: String(optOut),
+          source: "ui",
+        },
+      });
+    });
+  }
+  revalidatePath(`/guests/${guestId}`);
+  redirect(`/guests/${guestId}?tab=privacy`);
+}
+
 // --- Guest notes (CRS-REFINEMENT-R2 §4) — multi-note, author + timestamp, on the shared record ---
 
 /** Add a note to a guest. Author identity is taken from the session (never client-supplied), and

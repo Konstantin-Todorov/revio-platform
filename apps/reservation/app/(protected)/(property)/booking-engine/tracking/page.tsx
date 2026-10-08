@@ -1,7 +1,7 @@
 import { ShieldCheck, ShoppingBag } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { bookingEnginePage } from "@/lib/booking-engine-page";
-import { saveTrackingTags } from "@/lib/actions-tracking";
+import { savePrivacyUrl, saveTrackingTags } from "@/lib/actions-tracking";
 import { Card, CardHeader } from "@/components/ui/primitives";
 import { SubmitButton } from "@revio/ui/submit-button";
 import { i18n } from "@/lib/i18n/server";
@@ -17,10 +17,15 @@ export default async function BookingEngineTracking() {
   const { property } = await bookingEnginePage();
   const { t } = await i18n();
   const s = t(trackingDict);
-  const row = await prisma.property.findUnique({ where: { id: property.id }, select: { bookingGa4Id: true, bookingMetaPixelId: true } });
+  const row = await prisma.property.findUnique({ where: { id: property.id }, select: { bookingGa4Id: true, bookingMetaPixelId: true, bookingPrivacyUrl: true, publicSlug: true } });
   const on = [row?.bookingGa4Id && "Google Analytics", row?.bookingMetaPixelId && "Meta pixel"].filter(Boolean).join(" · ");
 
+  const p = s.privacy;
+  const origin = process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "") || "https://booking.reviosoft.app";
+  const generated = row?.publicSlug ? `${origin}/${row.publicSlug}/privacy` : null;
+
   return (
+    <>
     <Card>
       <CardHeader title={s.title} subtitle={s.subtitle} />
       <form action={saveTrackingTags} className="grid grid-cols-1 gap-4 px-5 py-4 md:grid-cols-2">
@@ -50,5 +55,29 @@ export default async function BookingEngineTracking() {
         </div>
       </div>
     </Card>
+    {/* Same page as the tags on purpose: both are what this page does with a guest's data. */}
+    <Card className="mt-4">
+      <CardHeader title={p.title} subtitle={p.subtitle} />
+      <form action={savePrivacyUrl} className="grid grid-cols-1 gap-4 px-5 py-4">
+        <div>
+          <label className={labelCls} htmlFor="privacyUrl">{p.url}</label>
+          <input id="privacyUrl" name="privacyUrl" type="url" inputMode="url" placeholder={p.urlPlaceholder} defaultValue={row?.bookingPrivacyUrl ?? ""} autoComplete="off" spellCheck={false} className={inputCls} />
+          <p className="mt-1 text-[11.5px] text-ink-500">{p.urlHint}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <SubmitButton pendingLabel={s.saving} className="h-[38px] rounded-md bg-brand-800 px-4 text-[13px] font-semibold text-white hover:bg-brand-700">{s.save}</SubmitButton>
+          <span className="text-[12.5px] text-ink-600">
+            {row?.bookingPrivacyUrl ? p.usingOwn : p.usingGenerated}
+            {!row?.bookingPrivacyUrl && generated && (
+              <>
+                {" "}
+                <a href={generated} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-700 underline">{p.viewGenerated}</a>
+              </>
+            )}
+          </span>
+        </div>
+      </form>
+    </Card>
+    </>
   );
 }

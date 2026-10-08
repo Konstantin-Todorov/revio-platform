@@ -67,6 +67,10 @@ export interface GuestsStrings {
     privacySub: string;
     optOut: string;
     optOutBody: string;
+    /** The guest's opt-out from "Before arrival" / "After departure" — the same switch as the link in those emails. */
+    marketingOptOut: string;
+    marketingOptOutBody: string;
+    marketingOptOutSince: (date: string) => string;
     notesTitle: (n: number) => string;
     notesSub: string;
     history: (n: number) => string;
@@ -176,6 +180,9 @@ export const guests: Translations<GuestsStrings> = {
       privacySub: "What this guest has asked us not to do — honoured across RevioDirect, RevioCRS and RevioPMS at once",
       optOut: "Do not recognise this guest across stays",
       optOutBody: "Suppresses “welcome back” on the booking page and the returning-guest note for the front desk. Their stay history is unchanged and still counts in every report.",
+      marketingOptOut: "No welcome or thank-you emails",
+      marketingOptOutBody: "Stops “Before arrival” and “After departure” for this guest. Confirmations, changes and receipts still go out. The guest can set this themselves from the link at the bottom of those emails.",
+      marketingOptOutSince: (d) => `Unsubscribed since ${d}`,
       notesTitle: (n) => `Notes (${n})`,
       notesSub: "Staff notes — visible wherever this guest appears, in every Revio product you run",
       history: (n) => `Booking history (${n})`,
@@ -289,6 +296,9 @@ export const guests: Translations<GuestsStrings> = {
       privacySub: "Какво гостът е поискал да не правим — спазва се едновременно в RevioDirect, RevioCRS и RevioPMS",
       optOut: "Не разпознавай този гост между престоите",
       optOutBody: "Спира „добре дошли отново“ на страницата за резервации и бележката за завръщащ се гост на рецепцията. Историята на престоите не се променя и се брои във всички отчети.",
+      marketingOptOut: "Без приветствени и благодарствени писма",
+      marketingOptOutBody: "Спира „Преди пристигане“ и „След престоя“ за този гост. Потвържденията, промените и сметките продължават да се изпращат. Гостът може да го направи и сам от връзката най-долу в тези писма.",
+      marketingOptOutSince: (d) => `Отписан от ${d}`,
       notesTitle: (n) => `Бележки (${n})`,
       notesSub: "Бележки на персонала — виждат се навсякъде, където се появява гостът, във всеки продукт на Revio, който ползвате",
       history: (n) => `История на резервациите (${n})`,

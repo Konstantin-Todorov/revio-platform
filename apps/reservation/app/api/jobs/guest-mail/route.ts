@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { JOB, withJobLease, forSystem, forTenant } from "@revio/db";
 import { sendTemplatedEmail } from "@revio/email";
@@ -16,6 +17,23 @@ import { bookingReference, guestMailDue, guestMailWindow, stayDetails, todayInTi
  * booking that arrived from Booking.com through RevioLink gets the same note as one typed into
  * RevioCRS.
  */
+/** Where the guest's "Unsubscribe" link lands — the public booking service, which has no login. */
+function bookingOrigin(): string {
+  return process.env.BOOKING_ENGINE_ORIGIN?.trim().replace(/\/+$/, "") || "https://booking.reviosoft.app";
+}
+
+/**
+ * Both of these are promotional (`GUEST_MARKETING_EMAILS` in core), so each carries an opt-out and a
+ * guest who used it is never sent another. The key is minted on the first send and reused after,
+ * so every link a guest ever received keeps working.
+ */
+async function emailPrefsTokenFor(db: ReturnType<typeof forTenant>, guest: { id: string; emailPrefsToken: string | null }): Promise<string> {
+  if (guest.emailPrefsToken) return guest.emailPrefsToken;
+  const token = randomBytes(24).toString("base64url");
+  await db.guest.update({ where: { id: guest.id }, data: { emailPrefsToken: token } });
+  return token;
+}
+
 function localHour(timeZone: string, now: Date): number {
   return Number(new Intl.DateTimeFormat("en-GB", { hour: "2-digit", hour12: false, timeZone }).format(now)) % 24;
 }
@@ -41,7 +59,11 @@ export async function POST(req: NextRequest) {
       for (const { propertyId } of optedIn) {
         const property = await system.property.findUnique({
           where: { id: propertyId },
-          select: { id: true, tenantId: true, name: true, timezone: true, defaultLanguage: true, checkInTime: true, checkOutTime: true },
+          select: {
+            id: true, tenantId: true, name: true, timezone: true, defaultLanguage: true, checkInTime: true, checkOutTime: true,
+            // The legal entity, so a promotional email names who is actually writing.
+            defaults: { select: { invoiceIssuerName: true } },
+          },
         });
         if (!property) continue;
         const today = todayInTimeZone(property.timezone, now);
@@ -70,9 +92,16 @@ export async function POST(req: NextRequest) {
           );
           if (!due) continue;
 
-          const to = r.guest?.email?.trim();
+          // A guest who said "no more of these" gets none. An OTA relay address carries the stay's own
+          // logistics (before arrival) but stops working at check-out and was never the guest's address
+          // to market to, so it gets no thank-you-and-rebook. Both are stamped below like any other skip.
+          const relayAfterStay = r.guest?.emailIsOtaAlias === true && due === "post_stay";
+          const to = r.guest && !relayAfterStay && !r.guest.marketingOptOutAt && !r.guest.erasedAt
+            ? r.guest.email?.trim()
+            : undefined;
           let outcome: "sent" | "skipped" | "failed" = "skipped";
-          if (to) {
+          if (to && r.guest) {
+            const prefsToken = await emailPrefsTokenFor(db, r.guest);
             // The guest's own language when they booked direct; the hotel's default otherwise.
             const locale = r.guestLanguage || property.defaultLanguage || "en";
             const reference = bookingReference(r.id);
@@ -81,6 +110,11 @@ export async function POST(req: NextRequest) {
               key: due,
               to: [to],
               locale,
+              unsubscribe: {
+                url: `${bookingOrigin()}/email/${prefsToken}`,
+                oneClickUrl: `${bookingOrigin()}/api/unsubscribe/${prefsToken}`,
+                sender: property.defaults?.invoiceIssuerName ?? null,
+              },
               vars: {
                 guestName: r.guest?.firstName || r.guestName, propertyName: property.name, reference,
                 checkIn, checkOut, roomType: line.roomType.name, checkInTime: property.checkInTime,

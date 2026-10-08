@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Clock, CreditCard, MapPin, Phone, Mail, ShieldCheck, Ticket } from "lucide-react";
 import type { PublicProperty } from "@/lib/property";
 import { serverKit } from "@/lib/i18n/server";
+import { REVIO_CONTACT } from "@revio/core";
 import { ConsentSettingsButton } from "@/components/Consent";
 
 /**
@@ -11,6 +12,12 @@ import { ConsentSettingsButton } from "@/components/Consent";
  * There is no Revio branding here on purpose. This is the hotel's booking page, and a platform
  * byline at the bottom of it would tell a guest they are transacting with someone other than the
  * hotel — the exact impression the product exists to remove.
+ *
+ * The strip under the columns is the legal minimum, and it is the HOTEL's: the entity a guest is
+ * contracting with (a distance sale must name the trader, and "Hotel Sofia" is rarely the company
+ * that takes the money), the privacy notice, and a way to report illegal content. The report goes
+ * to our office address because we host the page (EU Digital Services Act, Art. 16) — it is the one
+ * line here that reaches us, and it is worded so it does not read as a byline.
  */
 export async function PropertyFooter({ property }: { property: PublicProperty }) {
   const { s } = await serverKit(property);
@@ -89,6 +96,26 @@ export async function PropertyFooter({ property }: { property: PublicProperty })
             )}
           </ul>
         </section>
+      </div>
+      <div className="border-t" style={{ borderColor: "hsl(var(--line))" }}>
+        <p className="mx-auto flex w-full max-w-[72rem] flex-wrap gap-x-3 gap-y-1 px-5 py-4 text-[12px] sm:px-8" style={muted}>
+          {property.legal.name && <span>{f.operatedBy(property.legal.name)}</span>}
+          {property.legal.vatId && <span>{f.vatId(property.legal.vatId)}</span>}
+          {property.legal.address && <span>{property.legal.address}</span>}
+          <a
+            href={property.privacyUrl}
+            className="link-quiet font-semibold"
+            {...(property.privacyIsOwn ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+          >
+            {f.privacy}
+          </a>
+          <a
+            href={`mailto:${REVIO_CONTACT.email}?subject=${encodeURIComponent(`${f.report}: ${property.name} (/${property.slug})`)}`}
+            className="link-quiet"
+          >
+            {f.report}
+          </a>
+        </p>
       </div>
     </footer>
   );

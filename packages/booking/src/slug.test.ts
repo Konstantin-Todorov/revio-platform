@@ -41,7 +41,7 @@ describe("isValidSlug", () => {
 
   it("rejects our own route names", () => {
     // A hotel slug of "api" or "login" would shadow real routes.
-    for (const r of ["api", "login", "admin", "book", "operator", "www"]) {
+    for (const r of ["api", "login", "admin", "book", "operator", "www", "email"]) {
       expect(isValidSlug(r), r).toBe(false);
     }
   });

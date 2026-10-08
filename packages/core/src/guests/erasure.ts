@@ -73,6 +73,8 @@ export type ErasurePlan =
         company: null;
         specialRequests: null;
         emailIsOtaAlias: false;
+        /** The unsubscribe key goes with the address it belonged to; the opt-out date stays as a record. */
+        emailPrefsToken: null;
         erasedAt: Date;
       };
       /** Applied to every `Reservation` carrying this `guestId` — the copy that gets missed. */
@@ -126,6 +128,7 @@ export function planGuestErasure(
       specialRequests: null,
       // Cleared with the address it described, or the flag outlives the thing it was about.
       emailIsOtaAlias: false,
+      emailPrefsToken: null,
       erasedAt: opts.now ?? new Date(),
     },
     reservation: { guestName: ERASED_DISPLAY, notes: null },
@@ -158,6 +161,8 @@ export interface GuestExportInput {
     specialRequests: string | null;
     createdAt: Date;
     recognitionOptOut: boolean;
+    /** When they opted out of the hotel's promotional mail, if they did. */
+    marketingOptOutAt?: Date | null;
     erasedAt?: Date | null;
   };
   reservations: {
@@ -207,6 +212,7 @@ export function buildGuestExport(input: GuestExportInput, now: Date = new Date()
       requests: g.specialRequests,
       firstSeen: g.createdAt.toISOString(),
       askedNotToBeRecognisedBetweenStays: g.recognitionOptOut,
+      ...(g.marketingOptOutAt ? { unsubscribedFromHotelEmailsOn: g.marketingOptOutAt.toISOString() } : {}),
       ...(g.erasedAt ? { erasedAt: g.erasedAt.toISOString() } : {}),
     },
     stays: input.reservations.map((r) => ({

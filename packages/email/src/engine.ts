@@ -2,7 +2,9 @@ import {
   EMAIL_TEMPLATES,
   EMAIL_TEMPLATE_BY_KEY,
   EMAIL_OPT_IN,
+  GUEST_MARKETING_EMAILS,
   renderEmail,
+  unsubscribeFooter,
   defaultsFor,
   type EmailBrand,
   type EmailRatingAsk,
@@ -147,9 +149,24 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
    * two places is a token that cannot be revoked in one.
    */
   rating?: EmailRatingAsk | null;
+  /**
+   * The guest's opt-out, REQUIRED for a promotional email (`GUEST_MARKETING_EMAILS`).
+   *
+   * `url` is the page a person lands on from the footer link; `oneClickUrl` takes the RFC 8058 POST a
+   * mail client sends from its own "Unsubscribe" button. `sender` names who is writing — the hotel's
+   * legal entity where it has one, because a promotional email must identify its sender.
+   *
+   * A promotional email sent WITHOUT this is refused rather than sent bare: an opt-out a caller can
+   * forget is an opt-out that will be forgotten, by the next job someone writes.
+   */
+  unsubscribe?: { url: string; oneClickUrl: string; sender?: string | null } | null;
 }): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const def = EMAIL_TEMPLATE_BY_KEY[args.key];
   if (!def) return { ok: false, error: `Unknown email template "${args.key}"` };
+  const promotional = GUEST_MARKETING_EMAILS.has(args.key);
+  if (promotional && !args.unsubscribe) {
+    return { ok: false, error: `"${args.key}" is promotional and was sent without an unsubscribe link` };
+  }
   if (args.to.length === 0) return { ok: true, skipped: true };
 
   const property = await db.property.findUnique({ where: { id: args.propertyId } });
@@ -181,6 +198,14 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     ...(args.details?.length ? { details: args.details } : {}),
     ...(args.cta ? { cta: args.cta } : {}),
     ...(args.rating ? { rating: args.rating } : {}),
+    ...(promotional && args.unsubscribe
+      ? {
+          unsubscribe: {
+            ...unsubscribeFooter(locale, { propertyName: property.name, sender: args.unsubscribe.sender ?? null }),
+            url: args.unsubscribe.url,
+          },
+        }
+      : {}),
   });
 
   // The guest reads the hotel's name in From and replies to the hotel — not to Revio. The mail is
@@ -195,6 +220,14 @@ export async function sendTemplatedEmail(db: EmailDb, args: {
     // `senderName` sent every hotel that had not typed one as "Revio", which the guest did not book.
     fromName: rendered.fromName,
     replyTo: brand.replyTo ?? null,
+    ...(promotional && args.unsubscribe
+      ? {
+          headers: {
+            "List-Unsubscribe": `<${args.unsubscribe.oneClickUrl}>`,
+            "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+          },
+        }
+      : {}),
   });
   return res.ok ? { ok: true } : { ok: false, ...(res.error ? { error: res.error } : {}) };
 }
