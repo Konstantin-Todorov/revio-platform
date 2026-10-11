@@ -63,7 +63,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 /** Every markdown file that is allowed to make one of these claims, plus the code comments. */
 function docs(dir, out = []) {
   for (const name of readdirSync(dir)) {
-    if (name === "node_modules" || name === ".next" || name === ".git" || name === "dist") continue;
+    if (name === "node_modules" || name === ".next" || name === ".git" || name === ".claude" || name === "dist") continue;
     const full = join(dir, name);
     const st = statSync(full);
     if (st.isDirectory()) docs(full, out);

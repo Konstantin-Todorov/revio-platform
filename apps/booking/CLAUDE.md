@@ -22,7 +22,11 @@ and inventory-touching**, which changes the rules:
 - **Abuse protection is a feature, not hardening.** A hold takes a room off sale for its TTL, so an
   unthrottled create-hold endpoint lets a script take a small hotel's whole inventory off every
   channel. `@revio/booking`'s rate limiter caps holds per IP *and* per property — the second one is
-  what survives a distributed attempt. Tested, not assumed.
+  what survives a distributed attempt. Tested, not assumed. **Anything that spends something real is
+  counted in the database** (`lib/abuse.ts` → `takeAllowance` in `@revio/db`): holds, card intents
+  (each press makes a Customer + intent on the hotel's Stripe account) and guest mails. Search and the
+  price calendar stay in memory — they only read. The client address is `x-real-ip` (set by Railway's
+  edge), never the caller-writable first `x-forwarded-for` entry.
 - **The page is not indexed.** `robots: noindex` — the hotel's own marketing site should rank, not
   our checkout, and a stray index would compete with the client we built this for.
 

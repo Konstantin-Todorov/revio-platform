@@ -22,6 +22,7 @@ export {
   type LoginScope,
   type GateResult,
 } from "./login-gate.js";
+export { takeAllowance, type AllowanceRule, type AllowanceScope, type AllowanceResult } from "./public-allowance.js";
 export {
   requestPasswordReset,
   inviteStaff,

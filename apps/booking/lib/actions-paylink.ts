@@ -1,12 +1,14 @@
 "use server";
 
+import { headers } from "next/headers";
 import { forTenant } from "@revio/db";
 import { completePaymentRequest, paymentRequestState } from "@revio/booking";
 import { createGuestIntent, retrieveGuestIntent } from "@revio/payments";
 import { getPublicProperty } from "./property";
 import { serverKit } from "./i18n/server";
 import { alertHotel, findByReference, formatMoney } from "./manage";
-import { bookingReference } from "@revio/booking";
+import { bookingReference, clientIp } from "@revio/booking";
+import { allowCardIntent } from "./abuse";
 
 /**
  * Paying a link the hotel sent. The amount is the REQUEST's, never the page's: the server reads the
@@ -32,6 +34,8 @@ export async function startLinkPayment(slug: string, token: string): Promise<{ o
   const { property, req } = found;
   if (paymentRequestState(req) !== "open") return { ok: false, error: s.pay.notOpen };
   if (!property.paymentReady) return { ok: false, error: s.pay.notReady };
+  // A charge link is a token in an email; whoever holds it can press Pay as often as they like.
+  if (!(await allowCardIntent(clientIp(await headers()), `link:${req.id}`))) return { ok: false, error: s.errors.tooMany };
   const intent = await createGuestIntent({
     account: property.paymentAccountId,
     kind: "payment",

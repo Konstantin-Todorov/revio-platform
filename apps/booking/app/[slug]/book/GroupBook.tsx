@@ -1,6 +1,6 @@
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { checkHold, clientIp, publicCreateHold, publicGetHold } from "@revio/booking";
+import { clientIp, publicCreateHold, publicGetHold } from "@revio/booking";
 import { forTenant } from "@revio/db";
 import { guestPublishableKey } from "@revio/payments";
 import { normalisePromo, parseRoomParties, parseRoomPicks, serializeRoomParties, serializeRoomPicks } from "@revio/core";
@@ -8,6 +8,7 @@ import { BOOKING_SESSION_COOKIE } from "@/middleware";
 import type { PublicProperty } from "@/lib/property";
 import { isValidISO, nightsBetween } from "@/lib/dates";
 import { serverKit } from "@/lib/i18n/server";
+import { allowHold } from "@/lib/abuse";
 import { termsWords } from "@/lib/i18n/kit";
 import { groupPayNowMinor, groupQuery, groupTotalMinor, loadGroup } from "@/lib/group";
 import { PropertyHeader } from "@/components/PropertyHeader";
@@ -44,7 +45,7 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
     : [];
   const holds = live.length === items!.length && live.every(Boolean) ? live.map((h) => h!) : null;
   if (!holds) {
-    if (!checkHold(ip, property.id).ok) redirect(back);
+    if (!(await allowHold(ip, property.id))) redirect(back);
     const sessionId = (await cookies()).get(BOOKING_SESSION_COOKIE)?.value ?? null;
     const made: string[] = [];
     for (const it of items!) {

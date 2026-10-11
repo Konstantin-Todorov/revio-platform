@@ -4,13 +4,14 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { forSystem, forTenant } from "@revio/db";
 import {
-  bookingReference, checkCalendar, checkManageLink, clientIp, guestCancelReservation, guestChangeDates, guestPreviewChange,
+  bookingReference, checkCalendar, clientIp, guestCancelReservation, guestChangeDates, guestPreviewChange,
   mintManageToken, type ChangePreview, type ChangeRefusal,
 } from "@revio/booking";
 import { brandOf, sendEmail } from "@revio/email";
 import { renderEmail, todayInTimeZone } from "@revio/core";
 import { getPublicProperty } from "./property";
 import { serverKit } from "./i18n/server";
+import { allowGuestMail } from "./abuse";
 import { alertHotel, findByReference, formatMoney, mailGuest, manageUrl, mayManage } from "./manage";
 
 /**
@@ -127,7 +128,7 @@ export type LinkRequestResult = { ok: true } | { ok: false; limited: true };
 export async function requestManageLink(fd: FormData): Promise<LinkRequestResult> {
   const property = await getPublicProperty(str(fd, "slug"));
   if (!property) return { ok: true };
-  if (!checkManageLink(clientIp(await headers()), property.slug).ok) return { ok: false, limited: true };
+  if (!(await allowGuestMail(clientIp(await headers()), property.slug, "manage"))) return { ok: false, limited: true };
   // Typed by a person: "rv 7q2k9m", "RV-7Q2K9M " and "7Q2K9M" all mean the same booking.
   const typedRef = str(fd, "reference").replace(/\s+/g, "").replace(/^RV-?/i, "");
   const r = await findByReference(property, typedRef);

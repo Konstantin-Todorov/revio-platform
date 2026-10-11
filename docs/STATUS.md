@@ -474,6 +474,17 @@ says who can move it. Details sit where the link points.
   that never finished setup to first-run, which aborted the walk on the local test property —
   `click-walk` now takes `WALK_PROPERTY` like `route-walk`. Running all five dev servers beside
   `pnpm verify` exhausts local Postgres connections; walk apps one at a time.
+- ~~**What a bot could spend on RevioDirect**~~ ✅ **2026-10-11** — audit against "a vibe-coded app can
+  cost $100k with zero users": RLS on 81/82 tables (the 82nd is `_prisma_migrations`), no secret in any
+  browser bundle (the one public variable is Stripe's publishable key), Turnstile live on signup, the
+  public reservation API off (`BOOKING_ENGINE_API` unset), a reset mail only ever goes to a real active
+  account. Closed: **card intents were unlimited** (each "Pay" press made a Customer + intent on the
+  hotel's Stripe account, per hold and per pay link) — now 6 per hold / 12 per address; **holds and
+  guest mails counted in process memory**, so every deploy handed a script a fresh allowance — now in
+  Postgres (`takeAllowance`, one upsert that counts and decides, raced in a `.db.test`); **the client
+  address was the first `X-Forwarded-For` entry**, which the caller writes — now Railway's `X-Real-IP`.
+  Not closed by code: a spend cap on Railway (usage-billed, no CDN in front, photos proxied through the
+  app) and on the Anthropic key — founder, in each dashboard.
 
 **Bulgarian — in progress, screen by screen** (base and guardrails done 2026-09-24; each step ships alone):
 1. RevioPMS, by who reads it — **✅ every screen RevioPMS owns** (2026-09-24): front desk, check-in, walk-in,

@@ -4,9 +4,10 @@ import { headers } from "next/headers";
 import { forTenant } from "@revio/db";
 import { sendTemplatedEmail } from "@revio/email";
 import { canJoinWaitlist, DEFAULT_OFFER_TTL_MINUTES } from "@revio/core";
-import { clientIp, hit, type RateLimitRule } from "@revio/booking";
+import { clientIp } from "@revio/booking";
 import { getPublicProperty } from "./property";
 import { serverKit } from "./i18n/server";
+import { allowGuestMail } from "./abuse";
 
 /**
  * Joining the waitlist from a sold-out search.
@@ -30,8 +31,6 @@ import { serverKit } from "./i18n/server";
  * guest would also let somebody take two places in a queue that is ordered by `createdAt`.
  */
 
-const RULE: RateLimitRule = { limit: 5, windowMs: 10 * 60_000 };
-
 export interface JoinResult {
   ok: boolean;
   message?: string;
@@ -49,7 +48,7 @@ export async function joinWaitlist(_prev: JoinResult | null, fd: FormData): Prom
   const e = s.errors;
 
   const ip = clientIp(await headers());
-  if (!hit(`wl:${ip}:${property.id}`, RULE).ok) {
+  if (!(await allowGuestMail(ip, property.id, "waitlist"))) {
     return { ok: false, error: e.tooMany };
   }
 

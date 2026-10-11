@@ -43,6 +43,8 @@ export default tseslint.config(
       "packages/db/src/generated/**",
       "design/**",
       "docs/**",
+      // Agent worktrees: whole checkouts of other branches, linted by their own run, not this one.
+      ".claude/**",
       // Somebody else's code, kept as the record of what was handed over. Linting it would report
       // findings nobody is going to act on, and that noise is exactly what makes a lint run ignorable.
       "_intake/**",

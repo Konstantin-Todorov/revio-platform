@@ -90,7 +90,13 @@ describe("clientIp", () => {
     expect(clientIp(h)).toBe("203.0.113.7");
   });
 
-  it("falls back to x-real-ip, then to a shared bucket", () => {
+  it("prefers the edge-set x-real-ip over a forwarded chain the caller wrote", () => {
+    // A script sending its own X-Forwarded-For must not get a fresh bucket per request.
+    const h = new Headers({ "x-real-ip": "198.51.100.4", "x-forwarded-for": "6.6.6.6, 198.51.100.4" });
+    expect(clientIp(h)).toBe("198.51.100.4");
+  });
+
+  it("falls back to the first forwarded address, then to a shared bucket", () => {
     expect(clientIp(new Headers({ "x-real-ip": "198.51.100.4" }))).toBe("198.51.100.4");
     // Unknown collapses everyone into one stricter bucket rather than skipping the limit.
     expect(clientIp(new Headers())).toBe("unknown");

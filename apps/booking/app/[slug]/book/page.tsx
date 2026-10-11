@@ -2,7 +2,8 @@ import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { BedDouble, Users } from "lucide-react";
 import { cookies } from "next/headers";
-import { checkHold, clientIp, publicCreateHold, publicGetHold, publicSellableExtras } from "@revio/booking";
+import { clientIp, publicCreateHold, publicGetHold, publicSellableExtras } from "@revio/booking";
+import { allowHold } from "@/lib/abuse";
 import { BOOKING_SESSION_COOKIE } from "@/middleware";
 import { forTenant } from "@revio/db";
 import { getObjectStore } from "@revio/storage";
@@ -92,7 +93,7 @@ export default async function BookPage({
 
   if (!hold) {
     // Same limiter as the public API: holds are the one anonymous action with real inventory cost.
-    if (!checkHold(ip, property.id).ok) {
+    if (!(await allowHold(ip, property.id))) {
       redirect(`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`);
     }
     // The browsing session this hold belongs to — see `middleware.ts`. Without it, opening a second

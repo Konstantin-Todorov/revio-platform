@@ -85,18 +85,20 @@ export function __resetRateLimits(): void {
 }
 
 /**
- * The client's address behind Railway's proxy. `x-forwarded-for` is a comma-separated chain and only
- * the FIRST entry is the original client; taking the last would let a caller spoof its own identity
- * by sending the header. Falls back to a constant so a missing header degrades to a shared bucket
- * (stricter) rather than to no limit at all.
+ * The client's address behind Railway's proxy.
+ *
+ * `x-real-ip` first: Railway's edge sets it to the address it actually received the connection from
+ * (docs.railway.com → Public networking → Specs & limits). `x-forwarded-for` is a chain the CLIENT
+ * can start — a script sends `X-Forwarded-For: <random>` and, if the first entry is trusted, every
+ * request lands in a fresh bucket and no per-IP limit applies. It stays as the fallback for a host
+ * that does not set `x-real-ip` (local dev). A missing header degrades to one shared bucket — stricter,
+ * never unlimited.
  */
 export function clientIp(headers: Headers): string {
-  const fwd = headers.get("x-forwarded-for");
-  if (fwd) {
-    const first = fwd.split(",")[0]?.trim();
-    if (first) return first;
-  }
-  return headers.get("x-real-ip")?.trim() || "unknown";
+  const real = headers.get("x-real-ip")?.trim();
+  if (real) return real;
+  const first = headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return first || "unknown";
 }
 
 /** The price calendar: one call per two months paged, so a guest browsing a year is ~6. */

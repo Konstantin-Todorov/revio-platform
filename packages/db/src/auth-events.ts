@@ -88,19 +88,19 @@ export async function recordAuthEvent(input: RecordAuthEventInput): Promise<void
 /**
  * The caller's IP and browser, from the request headers.
  *
- * `x-forwarded-for` is a list appended to by each proxy; the FIRST entry is the client, the rest are
- * hops. Taking the last one records our own load balancer on every single row, which looks like data
- * and is not.
+ * `x-real-ip` is set by Railway's edge from the connection itself, so it is read first. When it is
+ * absent (local dev), `x-forwarded-for`'s FIRST entry is the client — the last is our own load
+ * balancer, which on every row looks like data and is not.
  *
- * It is client-supplied and therefore spoofable. Kept anyway, because the value is in the pattern —
+ * The forwarded chain is client-supplied and therefore spoofable. Kept anyway, because the value is in the pattern —
  * twenty attempts from one address, or a sign-in from a country the hotel has never seen — and a
  * forged header is itself worth having recorded.
  */
 export function requestOrigin(headers: Headers): { ip: string | null; userAgent: string | null } {
-  const forwarded = headers.get("x-forwarded-for");
+  // `x-real-ip` is set by Railway's edge and cannot be supplied by the caller; `x-forwarded-for` can.
   const ip =
-    forwarded?.split(",")[0]?.trim() ||
-    headers.get("x-real-ip") ||
+    headers.get("x-real-ip")?.trim() ||
+    headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     null;
   return { ip, userAgent: headers.get("user-agent") };
 }

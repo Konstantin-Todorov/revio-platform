@@ -1,8 +1,9 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { forTenant } from "@revio/db";
-import { bookingReference, publicCreateReservation, publicGetHold, publicQuoteStay, publicReleaseHold } from "@revio/booking";
+import { bookingReference, clientIp, publicCreateReservation, publicGetHold, publicQuoteStay, publicReleaseHold } from "@revio/booking";
 import { cancelGuestIntent, captureGuestIntent, createGuestIntent, retrieveGuestIntent } from "@revio/payments";
 import { sendTemplatedEmail } from "@revio/email";
 import { PAY_AT_HOTEL_LABEL, parseChildAges, stayDetails, type StayTerms } from "@revio/core";
@@ -12,6 +13,7 @@ import { getPublicProperty } from "./property";
 import { alertHotel, findByReference, manageUrl } from "./manage";
 import { confirmGroup, isGroupForm, startGroupPayment } from "./group-booking";
 import { nightsBetween } from "./dates";
+import { allowCardIntent } from "./abuse";
 
 /**
  * Confirming a booking.
@@ -49,6 +51,13 @@ export async function startCardPayment(fd: FormData): Promise<StartPaymentResult
   if (!str(fd, "firstName") || !str(fd, "lastName")) return { ok: false, error: e.name };
   if (!/.+@.+\..+/.test(str(fd, "email"))) return { ok: false, error: e.email };
   if (fd.get("acceptTerms") == null) return { ok: false, error: e.terms };
+
+  // Each press creates a Customer and an intent on the HOTEL's Stripe account, so a script looping
+  // this would fill their dashboard. Counted per address and per hold, in the database.
+  const holdKey = isGroupForm(fd) ? str(fd, "holds") : str(fd, "holdId");
+  if (!(await allowCardIntent(clientIp(await headers()), `${property.id}:${holdKey}`))) {
+    return { ok: false, error: e.tooMany };
+  }
 
   // Several rooms: one payment for all of them — see group-booking.ts.
   if (isGroupForm(fd)) return startGroupPayment(property, fd);
