@@ -2540,6 +2540,15 @@ Notes: **bank transfer is exempt** (чл. 3 ал. 1), so most hotel money needs 
 all. СУПТО is voluntary and we are declining it. `fiscalizeInvoice` used to stamp a fabricated
 `NRA-…` seal on real tax invoices — now demo tenants only.
 
+### 2026-10-11 · Claude · DONE · weber-os-trials
+**Read-only trial view for Weber OS (activation nudges).**
+Files: `apps/operator/app/api/weber-os/trials/route.ts`, `apps/operator/middleware.ts`
+Notes: GET with `Authorization: Bearer $WEBER_OS_TRIALS_SECRET`; 503 when the secret is unset or
+shorter than 32 chars. Running, opened, non-demo trials only: owner contact plus counts (rooms,
+rates, real OTA channels, reservations), booking engine/Stripe yes/no, last active day. Nothing is
+sent from here; Weber OS proposes drafts that the office approves. The clock emails stay in
+`trial-sweep`.
+
 ---
 
 ## Open — not claimed by anyone

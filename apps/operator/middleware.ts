@@ -62,9 +62,12 @@ export const config = {
    *                 to Stripe's retry logic, so every payment would be recorded as delivered while
    *                 no invoice was ever marked paid.
    *
+   *   api/weber-os — our own back office (Weber OS) reads the running trials to draft activation
+   *                 nudges. Same shape again: a server with no cookie, a shared secret, 503 when unset.
+   *
    * None is unguarded. Health returns only up/down; leads and jobs each require a shared secret and
    * refuse outright when one is not configured; the Stripe webhook refuses anything without a valid
    * HMAC signature, and refuses everything when no signing secret is stored.
    */
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|api/jobs|api/webhooks|.*\\.[a-zA-Z0-9]+$).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/health|api/leads|api/jobs|api/webhooks|api/weber-os|.*\\.[a-zA-Z0-9]+$).*)"],
 };
