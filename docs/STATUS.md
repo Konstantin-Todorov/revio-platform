@@ -474,6 +474,12 @@ says who can move it. Details sit where the link points.
   that never finished setup to first-run, which aborted the walk on the local test property —
   `click-walk` now takes `WALK_PROPERTY` like `route-walk`. Running all five dev servers beside
   `pnpm verify` exhausts local Postgres connections; walk apps one at a time.
+- ~~**Revenue hints on the RevioCRS dashboard**~~ ✅ **2026-10-11** — "Подсказки за цените": which nights to
+  raise and which to fill, each with the numbers behind it and a link to the night. Four rules, stated
+  in `core/metrics/revenue-hints.ts` (21 tests): filling fast (≥ 75% sold or fast 7-day pickup, a week
+  or more out), a nearly-full night at a quiet night's price, mostly empty 1–3 days away, a week under
+  60% of last year. Consecutive nights merge into one line, and several empty rooms on the same nights
+  become one line about the hotel. Suggests only — never changes a price. Not shown on the portfolio view.
 - ~~**What a bot could spend on RevioDirect**~~ ✅ **2026-10-11** — audit against "a vibe-coded app can
   cost $100k with zero users": RLS on 81/82 tables (the 82nd is `_prisma_migrations`), no secret in any
   browser bundle (the one public variable is Stripe's publishable key), Turnstile live on signup, the

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingUp } from "lucide-react";
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, CalendarRange, Layers, TrendingDown, TrendingUp } from "lucide-react";
 import { hasFinishedSetup } from "@revio/core";
 import { SetupChecklist } from "@revio/ui/setup-checklist";
 import { prisma } from "@/lib/db";
@@ -10,6 +10,7 @@ import { buildActionAlerts, getForecast, getOperations, getRangeMetrics, resolve
 import { DashboardView, type KpiCard } from "@/components/dashboard/DashboardView";
 import { ensurePickupSnapshot } from "@/lib/pickup";
 import { releaseExpiredHolds } from "@/lib/holds";
+import { getRevenueHints } from "@/lib/revenue-hints";
 import { Card, CardHeader, PageHeader, StatusPill } from "@/components/ui/primitives";
 import { i18n } from "@/lib/i18n/server";
 import { LOCALE_LABELS } from "@revio/ui/i18n";
@@ -77,13 +78,29 @@ export default async function DashboardPage({
     ];
     if (rules.length) portfolioCaveats.push(t.portfolio.otherRules(ops.property.name, rules.join(", ")));
   }
-  const [metrics, stly, board, f7, f30] = await Promise.all([
+  const [metrics, stly, board, f7, f30, hints] = await Promise.all([
     getRangeMetrics(range),
     getRangeMetrics(comparisonRange(range, basis)), // YoY=364d (STLY) or LW=7d, per the toggle
     getInventoryBoard({ days: 14 }),
     getForecast(ops.todayIso, 7),
     getForecast(ops.todayIso, 30),
+    getRevenueHints(ops.todayIso),
   ]);
+  /** Headline + reason for one hint, in the reader's language and money. */
+  const hintText = (h: (typeof hints)[number]): { lead: string; why: string; href: string; up: boolean } => {
+    const price = (m: number | null) => (m == null ? null : money(m, ops.property.baseCurrency));
+    const when = (h: { date: string; to: string }) => (h.to === h.date ? day(h.date) : `${day(h.date)} – ${day(h.to)}`);
+    switch (h.kind) {
+      case "filling_fast":
+        return { lead: t.hints.fillingFast(h.roomTypeName, when(h)), why: t.hints.fillingFastWhy(h.sold, h.capacity, h.nights, h.pickup, price(h.priceMinor)), href: `/inventory?start=${h.date}&days=7`, up: true };
+      case "flat_price":
+        return { lead: t.hints.flatPrice(h.roomTypeName, when(h)), why: t.hints.flatPriceWhy(h.sold, h.capacity, h.nights, price(h.priceMinor)!, price(h.quietPriceMinor)!), href: `/inventory?start=${h.date}&days=7`, up: true };
+      case "unsold_soon":
+        return { lead: h.roomTypes > 1 ? t.hints.hotelEmptySoon(when(h), h.daysOut, h.nights) : t.hints.unsoldSoon(h.roomTypeName, when(h), h.daysOut, h.nights), why: t.hints.unsoldSoonWhy(h.sold, h.capacity, h.nights, price(h.priceMinor)), href: `/inventory?start=${h.date}&days=7`, up: false };
+      case "behind_last_year":
+        return { lead: t.hints.behind(day(h.from), day(h.to)), why: t.hints.behindWhy(h.sold, h.soldLastYear), href: `/inventory?start=${h.from}&days=7`, up: false };
+    }
+  };
   const alerts = buildActionAlerts({
     board,
     threshold: ops.defaults?.lowAvailabilityThreshold ?? 2,
@@ -253,6 +270,37 @@ export default async function DashboardPage({
             {portfolioCaveats.map((c) => <span key={c} className="mt-1 block">{c}</span>)}
           </span>
         </div>
+      )}
+
+      {/* Revenue hints — suggestions, each with the numbers behind it and the night to open. */}
+      {!isGroup && (
+        <Card>
+          <CardHeader title={t.hints.title} />
+          {hints.length === 0 ? (
+            <div className="px-4 py-6 text-[13px] text-ink-500">{t.hints.empty}</div>
+          ) : (
+            <ul className="divide-y divide-surface-border/60">
+              {hints.map((h, i) => {
+                const x = hintText(h);
+                return (
+                  <li key={i}>
+                    <Link href={x.href} className="group flex items-start gap-3 px-4 py-3 transition-colors hover:bg-surface-muted">
+                      <span className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${x.up ? "bg-success-50 text-success-600" : "bg-warning-50 text-warning-600"}`}>
+                        {x.up ? <TrendingUp className="h-4 w-4" aria-hidden /> : <TrendingDown className="h-4 w-4" aria-hidden />}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[13.5px] font-semibold text-ink-900">{x.lead}</span>
+                        <span className="tnum mt-0.5 block text-[12.5px] text-ink-600">{x.why}</span>
+                      </span>
+                      <span className="hidden shrink-0 self-center text-[12px] font-medium text-brand-700 group-hover:underline sm:inline">{t.hints.open} →</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <p className="border-t border-surface-border/60 px-4 py-2 text-[11px] text-ink-400">{t.hints.footnote}</p>
+        </Card>
       )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

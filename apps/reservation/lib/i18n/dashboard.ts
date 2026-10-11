@@ -87,6 +87,24 @@ export interface DashboardStrings {
     failedSyncs: (n: number) => string;
     openErrors: (n: number) => string;
   };
+  /** Revenue hints — suggestions with their reasons; `price` arrives already formatted. */
+  hints: {
+    title: string;
+    footnote: string;
+    empty: string;
+    open: string;
+    fillingFast: (room: string, date: string) => string;
+    /** `nights` > 1 means the numbers are room-nights summed over a run of nights. */
+    fillingFastWhy: (sold: number, capacity: number, nights: number, pickup: number | null, price: string | null) => string;
+    flatPrice: (room: string, date: string) => string;
+    flatPriceWhy: (sold: number, capacity: number, nights: number, price: string, quiet: string) => string;
+    unsoldSoon: (room: string, date: string, daysOut: number, nights: number) => string;
+    unsoldSoonWhy: (sold: number, capacity: number, nights: number, price: string | null) => string;
+    /** Several room types empty over the same nights — said once, about the hotel. */
+    hotelEmptySoon: (date: string, daysOut: number, nights: number) => string;
+    behind: (from: string, to: string) => string;
+    behindWhy: (sold: number, lastYear: number) => string;
+  };
   forecast: {
     title: string;
     window: string;
@@ -199,6 +217,26 @@ export const dashboard: Translations<DashboardStrings> = {
       low: (room, n, date) => `${room}: only ${n} left on ${date}`,
       failedSyncs: (n) => `${n} failed sync${n === 1 ? "" : "s"} in the last 24h`,
       openErrors: (n) => `${n} unresolved error${n === 1 ? " needs" : "s need"} attention`,
+    },
+    hints: {
+      title: "Pricing hints",
+      footnote: "Suggestions only — nothing changes until you change it. Read from the next 31 nights: what is sold, what sold this week, and the same week last year.",
+      empty: "Nothing to suggest for the coming month — no night is filling faster than its price, and none close by is sitting empty.",
+      open: "Open in the calendar",
+      fillingFast: (room, date) => `${room} on ${date} is filling fast`,
+      fillingFastWhy: (sold, cap, nights, pickup, price) =>
+        `${sold} of ${cap}${nights > 1 ? " room-nights" : ""} sold${pickup ? `, ${pickup} of them this week` : ""}${price ? `, at ${price}` : ""}. Consider raising the price.`,
+      flatPrice: (room, date) => `${room} on ${date} is nearly full at an everyday price`,
+      flatPriceWhy: (sold, cap, nights, price, quiet) =>
+        `${sold} of ${cap} ${nights > 1 ? "room-nights " : ""}sold at ${price} — no more than its quiet nights (${quiet}). Consider raising it.`,
+      unsoldSoon: (room, date, daysOut, nights) =>
+        `${room} on ${date} is mostly empty — ${nights > 1 ? "from " : ""}${daysOut === 1 ? "tomorrow" : `in ${daysOut} days`}`,
+      unsoldSoonWhy: (sold, cap, nights, price) =>
+        `${sold} of ${cap} ${nights > 1 ? "room-nights " : ""}sold${price ? `, at ${price}` : ""}. A last-minute rate or one more channel could fill ${nights > 1 ? "them" : "it"}.`,
+      hotelEmptySoon: (date, daysOut, nights) =>
+        `The hotel is mostly empty on ${date} — ${nights > 1 ? "from " : ""}${daysOut === 1 ? "tomorrow" : `in ${daysOut} days`}`,
+      behind: (from, to) => `The week ${from} – ${to} is behind last year`,
+      behindWhy: (sold, ly) => `${sold} room-nights sold, against ${ly} at this point last year.`,
     },
     forecast: {
       title: "Forecast — the same data read forward",
@@ -319,6 +357,26 @@ export const dashboard: Translations<DashboardStrings> = {
       low: (room, n, date) => `${room}: остават само ${n} на ${date}`,
       failedSyncs: (n) => `${n} ${n === 1 ? "неуспешна синхронизация" : "неуспешни синхронизации"} през последните 24 ч`,
       openErrors: (n) => `${n} ${n === 1 ? "нерешена грешка изисква" : "нерешени грешки изискват"} внимание`,
+    },
+    hints: {
+      title: "Подсказки за цените",
+      footnote: "Само предложения — нищо не се променя, докато Вие не го промените. Гледаме следващите 31 нощи: какво е продадено, какво се продаде тази седмица и същата седмица миналата година.",
+      empty: "Няма какво да предложим за следващия месец — няма нощ, която се пълни по-бързо от цената си, и няма близка нощ, която стои празна.",
+      open: "Отвори в календара",
+      fillingFast: (room, date) => `${room} за ${date} се пълни бързо`,
+      fillingFastWhy: (sold, cap, nights, pickup, price) =>
+        `Продадени ${sold} от ${cap}${nights > 1 ? " нощувки" : ""}${pickup ? `, ${pickup} от тях тази седмица` : ""}${price ? `, при цена ${price}` : ""}. Помислете за по-висока цена.`,
+      flatPrice: (room, date) => `${room} за ${date} е почти пълна на обичайна цена`,
+      flatPriceWhy: (sold, cap, nights, price, quiet) =>
+        `Продадени ${sold} от ${cap}${nights > 1 ? " нощувки" : ""} при ${price} — не повече от тихите нощи (${quiet}). Помислете за по-висока цена.`,
+      unsoldSoon: (room, date, daysOut, nights) =>
+        `${room} за ${date} е почти празна — ${nights > 1 ? "от " : ""}${daysOut === 1 ? "утре" : `${nights > 1 ? "" : "след "}${daysOut} дни${nights > 1 ? " напред" : ""}`}`,
+      unsoldSoonWhy: (sold, cap, nights, price) =>
+        `Продадени ${sold} от ${cap}${nights > 1 ? " нощувки" : ""}${price ? `, при цена ${price}` : ""}. Цена за последна минута или още един канал може да ${nights > 1 ? "ги" : "я"} напълни.`,
+      hotelEmptySoon: (date, daysOut, nights) =>
+        `Хотелът е почти празен за ${date} — ${nights > 1 ? "от " : ""}${daysOut === 1 ? "утре" : `${nights > 1 ? "" : "след "}${daysOut} дни${nights > 1 ? " напред" : ""}`}`,
+      behind: (from, to) => `Седмицата ${from} – ${to} изостава от миналата година`,
+      behindWhy: (sold, ly) => `Продадени ${sold} нощувки срещу ${ly} към този момент миналата година.`,
     },
     forecast: {
       title: "Прогноза — същите данни, гледани напред",

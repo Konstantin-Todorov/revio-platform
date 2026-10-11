@@ -180,6 +180,8 @@ export interface InventorySection {
   /** One waterfall per visible date, aligned with `dates`. */
   cells: (WaterfallResult & {
     manualOverride: boolean;
+    /** The headline price in minor units; null when nothing resolves for this night. */
+    priceMinor?: number | null;
     /** The headline rate — the primary occupancy's under per-person, the room's under per-room. */
     rate: string;
     /** Price per rate-plan id, one for every row in `ratePlanRows`. */
@@ -422,6 +424,8 @@ export async function getInventoryBoard(q: InventoryQuery = {}) {
         }),
         manualOverride: manual != null,
         rate: priceMinor != null ? String(Math.round(priceMinor / 100)) : "—",
+        /** The same headline price in minor units — what revenue hints compare night against night. */
+        priceMinor,
         /*
          * One entry per rate row on screen. The headline `rate` above stays the first plan's, so
          * nothing that already reads it changes; this is what makes the SECOND plan visible at all —
