@@ -80,6 +80,12 @@ suite makes you take everything, and a point solution makes you integrate. *`@re
     one way this feature could harm the person who switched it on.
   - The guest gets **four hours**, not the checkout page's thirty minutes: an offer arrives by email
     and the guest may be asleep. *`core/waitlist/`, 26 tests; `@revio/booking` sweep, 26 tests.*
+- **Pricing hints on the dashboard — suggestions, never changes.** Which nights to raise and which to
+  fill, each said with the numbers behind it and a link to that night: a night filling fast (≥ 75% sold,
+  or fast pickup this week, a week or more out); a nearly-full night priced no higher than the same
+  room's quiet nights; a hotel mostly empty one to three days away; a week far behind the same week last
+  year. Nothing is changed automatically — the hotel knows things we do not. *`core/metrics/revenue-hints.ts`
+  (21 tests); RevioCRS → Табло.* Live 2026-10-11.
 - **Recovered revenue is reported honestly.** Two rates, never one: how often an offer converts
   (that measures us) and how much of the demand was served (that mostly measures how often rooms come
   free). One number alone flatters or damns depending which you picked. *`core/metrics/waitlist.ts`.*
