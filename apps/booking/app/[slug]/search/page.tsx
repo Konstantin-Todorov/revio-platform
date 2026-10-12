@@ -111,7 +111,7 @@ export default async function SearchPage({
         </div>
       </div>
 
-      <main className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-6 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[72rem] px-5 pb-20 pt-6 sm:px-8">
         <StepBar current="Room" backHref={`/${property.slug}`} s={s.steps} />
 
         <div className="mt-6 sm:mt-8">

@@ -175,7 +175,7 @@ export default async function ConfirmationPage({
     <>
       <PropertyHeader property={property} />
 
-      <main className="mx-auto w-full max-w-[52rem] px-5 pb-20 pt-6 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[52rem] px-5 pb-20 pt-6 sm:px-8">
         <StepBar current="Confirm" s={t.steps} />
 
         <div className="mt-8 text-center">

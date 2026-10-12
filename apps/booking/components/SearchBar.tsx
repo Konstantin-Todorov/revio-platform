@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { CalendarDays, Minus, Plus, Search, Users } from "lucide-react";
 import { DateRangePanel } from "./DateRangePanel";
 import { useDismiss } from "@/lib/use-dismiss";
 import { addDays, isValidISO, nightsBetween, todayISO } from "@/lib/dates";
 import { useGuestKit } from "@/lib/i18n/use-kit";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 import type { GuestKit } from "@/lib/i18n/kit";
 
 /**
@@ -326,8 +327,12 @@ function Sheet({
   onClose: () => void;
   align?: "left" | "right";
 }) {
+  const box = useRef<HTMLDivElement>(null);
+  useDialogFocus(box, true);
   return (
     <div
+      ref={box}
+      tabIndex={-1}
       role="dialog"
       aria-modal="true"
       aria-label={title}

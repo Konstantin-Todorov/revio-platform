@@ -51,7 +51,7 @@ export default async function PrivacyPage({ params }: { params: Promise<{ slug: 
   return (
     <>
       <PropertyHeader property={property} />
-      <main className="mx-auto w-full max-w-[42rem] px-5 pb-20 pt-10 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[42rem] px-5 pb-20 pt-10 sm:px-8">
         <h1 className="display text-[2rem]">{n.title}</h1>
         <p className="mt-2 text-[15px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>{n.intro(property.name)}</p>
         <div className="mt-8 space-y-6">

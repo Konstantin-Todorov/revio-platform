@@ -6,6 +6,7 @@ import { BED_SETUP_BY_KEY, BED_SETUP_ICON_BY_KEY, groupAmenities } from "@revio/
 import { AmenityIcon } from "@revio/ui/amenity-icon";
 import type { PublicRoomOption } from "@revio/booking";
 import { useGuestKit } from "@/lib/i18n/use-kit";
+import { useDialogFocus } from "@/lib/use-dialog-focus";
 
 /**
  * Everything a guest wants to know before choosing this room, in one place.
@@ -107,6 +108,8 @@ export function RoomDetail({
 
   const current = photos[index];
   const ratesRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useDialogFocus(dialogRef, open, { trap: true });
   // Swipe on a phone: a horizontal flick of more than 40px changes the photo; the arrows stay for
   // everyone else (a gallery that only swipes is one a mouse or a keyboard cannot use).
   const touchX = useRef<number | null>(null);
@@ -132,6 +135,8 @@ export function RoomDetail({
 
       {open && (
         <div
+          ref={dialogRef}
+          tabIndex={-1}
           role="dialog"
           aria-modal="true"
           aria-label={option.name}

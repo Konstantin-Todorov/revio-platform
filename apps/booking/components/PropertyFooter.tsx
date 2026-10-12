@@ -109,6 +109,9 @@ export async function PropertyFooter({ property }: { property: PublicProperty })
           >
             {f.privacy}
           </a>
+          <a href={`/${property.slug}/accessibility`} className="link-quiet">
+            {f.accessibility}
+          </a>
           <a
             href={`mailto:${REVIO_CONTACT.email}?subject=${encodeURIComponent(`${f.report}: ${property.name} (/${property.slug})`)}`}
             className="link-quiet"

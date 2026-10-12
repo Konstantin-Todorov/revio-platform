@@ -47,7 +47,7 @@ function Outcome({
   children: React.ReactNode;
 }) {
   return (
-    <main className="mx-auto max-w-xl px-5 py-16">
+    <main id="main" tabIndex={-1} className="mx-auto max-w-xl px-5 py-16">
       <h1 className="text-[22px] font-bold" style={{ color: "hsl(var(--brand-text))" }}>
         {title}
       </h1>

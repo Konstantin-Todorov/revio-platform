@@ -30,8 +30,17 @@ export const BOOKING_SESSION_COOKIE = "revio_bk";
 
 const ONE_DAY_SECONDS = 60 * 60 * 24;
 
+/**
+ * The path, handed to the root layout. `<html lang>` has to be the guest's language — a screen
+ * reader pronounces the whole page by it (WCAG 3.1.1) — and the root layout renders before any
+ * route params exist, so it cannot otherwise know which hotel, and so which default, applies.
+ */
+export const PATH_HEADER = "x-revio-path";
+
 export function middleware(req: NextRequest) {
-  const res = NextResponse.next();
+  const forwarded = new Headers(req.headers);
+  forwarded.set(PATH_HEADER, req.nextUrl.pathname);
+  const res = NextResponse.next({ request: { headers: forwarded } });
   if (req.cookies.get(BOOKING_SESSION_COOKIE)) return res;
 
   res.cookies.set(BOOKING_SESSION_COOKIE, crypto.randomUUID(), {

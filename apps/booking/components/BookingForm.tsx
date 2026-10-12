@@ -153,7 +153,7 @@ export function BookingForm({
 
       {/* One-time token: a double press or a retried request confirms one booking, not two. */}
       <SubmitTokenField />
-      <HoldCountdown expiresAt={expiresAt} expired={s.holdExpired} holding={s.holding} />
+      <HoldCountdown expiresAt={expiresAt} expired={s.holdExpired} holding={s.holding} warning={s.holdWarning} />
 
       <section className="card-raised p-5 sm:p-6">
         <h2 className="display text-[1.25rem]">{s.whoTitle}</h2>
@@ -295,6 +295,9 @@ export function BookingForm({
           </span>
         </label>
         <p className="mt-2 pl-[26px] text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
+          {s.noWithdrawal}
+        </p>
+        <p className="mt-2 pl-[26px] text-[12.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>
           {s.privacyNote(privacy.hotel)}{" "}
           <a
             href={privacy.url}
@@ -377,7 +380,10 @@ function Field({
  * reaches zero. That is the difference between this and the countdowns that made OTAs distrusted —
  * every other claim on this site is honest, and a fake timer here would cost all of them.
  */
-function HoldCountdown({ expiresAt, expired, holding }: { expiresAt: string; expired: string; holding: string }) {
+/** Seconds before the end at which the guest is told, once. */
+const HOLD_WARNING_SECONDS = 120;
+
+function HoldCountdown({ expiresAt, expired, holding, warning }: { expiresAt: string; expired: string; holding: string; warning: string }) {
   const [left, setLeft] = useState<number | null>(null);
 
   useEffect(() => {
@@ -392,24 +398,38 @@ function HoldCountdown({ expiresAt, expired, holding }: { expiresAt: string; exp
   // with a stale value and visibly jump.
   if (left === null) return null;
 
+  /*
+   * Two parts on purpose. The ticking clock is NOT a live region: one that changes every second is
+   * either read out every second or ignored (WCAG 4.1.3). A screen reader hears exactly two things —
+   * the two-minute warning and the end — from the always-present region below.
+   */
+  const announce = left === 0 ? expired : left <= HOLD_WARNING_SECONDS ? warning : "";
+
   if (left === 0) {
     return (
-      <p
-        className="rounded-[var(--r-sm)] px-4 py-3 text-[13.5px] font-semibold"
-        style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
-        role="status"
-      >
-        {expired}
-      </p>
+      <>
+        <p
+          className="rounded-[var(--r-sm)] px-4 py-3 text-[13.5px] font-semibold"
+          style={{ backgroundColor: "hsl(var(--caution) / 0.1)", color: "hsl(var(--caution))" }}
+        >
+          {expired}
+        </p>
+        <p className="sr-only" role="status">{announce}</p>
+      </>
     );
   }
 
   const m = Math.floor(left / 60);
   const s = String(left % 60).padStart(2, "0");
+  const soon = left <= HOLD_WARNING_SECONDS;
   return (
-    <p className="text-[13px]" style={{ color: "hsl(var(--ink-soft))" }} role="status">
-      {holding}{" "}
-      <strong className="nums font-bold" style={{ color: "hsl(var(--ink))" }}>{m}:{s}</strong>.
-    </p>
+    <>
+      <p className="text-[13px]" style={{ color: soon ? "hsl(var(--caution))" : "hsl(var(--ink-soft))" }}>
+        {holding}{" "}
+        <strong className="nums font-bold" style={{ color: soon ? "hsl(var(--caution))" : "hsl(var(--ink))" }}>{m}:{s}</strong>.
+        {soon && <span className="mt-1 block font-semibold">{warning}</span>}
+      </p>
+      <p className="sr-only" role="status">{announce}</p>
+    </>
   );
 }

@@ -67,6 +67,20 @@ export interface GuestStrings {
     privacy: string;
     /** DSA Art. 16: anyone can flag content on the page as illegal. */
     report: string;
+    /** The accessibility statement (European Accessibility Act). */
+    accessibility: string;
+  };
+  /** Skip link and the accessibility statement page. */
+  a11y: {
+    skip: string;
+    title: string;
+    intro: (hotel: string) => string;
+    standardTitle: string; standardBody: string;
+    doesTitle: string; does: string[];
+    limitsTitle: string; limits: string[];
+    holdTitle: string; holdBody: string;
+    contactTitle: string; contactBody: (hotelEmail: string, revioEmail: string) => string;
+    checked: (date: string) => string;
   };
   /**
    * The consent banner — shown only when the hotel has added its own Google Analytics or Meta pixel.
@@ -207,10 +221,14 @@ export interface GuestStrings {
     accept: string; acceptCard: string;
     /** Under the acceptance box: what the details are for, and where the notice is. */
     privacyNote: (hotel: string) => string; privacyLink: string;
+    /** The trader must say when there is no right of withdrawal (ЗЗП чл. 57; Directive 2011/83/EU art. 16(l)). */
+    noWithdrawal: string;
     confirming: string; sending: string; confirm: string; request: string;
     confirmHint: string; requestHint: string;
     holdExpired: string;
     holding: string;
+    /** Said once, two minutes before the hold ends (WCAG 2.2.1 — a time limit is announced). */
+    holdWarning: string;
   };
   errors: {
     unavailablePage: string;
@@ -374,6 +392,33 @@ export const guest: Translations<GuestStrings> = {
       vatId: (id) => `Company / VAT no. ${id}`,
       privacy: "Privacy notice",
       report: "Report illegal content",
+      accessibility: "Accessibility",
+    },
+    a11y: {
+      skip: "Skip to main content",
+      title: "Accessibility",
+      intro: (h) => `${h} wants everyone to be able to book a stay here, including guests who use a screen reader, a keyboard, magnification or voice control.`,
+      standardTitle: "The standard we work to",
+      standardBody: "This booking page aims to meet the Web Content Accessibility Guidelines (WCAG) 2.1 at level AA, the standard behind the European Accessibility Act (EN 301 549). It has been checked by the team that builds it, not yet by an external auditor.",
+      doesTitle: "What the page does",
+      does: [
+        "Text on the hotel's colours and photos is measured to a contrast of at least 4.5:1 — never assumed.",
+        "Every step works with a keyboard alone, including choosing dates in the calendar with the arrow keys.",
+        "Every form field has a visible label, and the page tells a screen reader which language it is in.",
+        "You can zoom up to five times; nothing locks the page size.",
+        "The price you see first is the price you pay, with taxes and fees included.",
+      ],
+      limitsTitle: "What we know is not perfect yet",
+      limits: [
+        "Room photos are uploaded by the hotel and may not all carry a description.",
+        "The card form is Stripe's own secure frame; its accessibility is Stripe's.",
+        "Some small buttons, such as the photo arrows, are smaller than the 44 px we aim for.",
+      ],
+      holdTitle: "The room held for you",
+      holdBody: "When you open the booking form, the room is held for 15 minutes so nobody else can take it. Two minutes before the hold ends you are told — on screen and to a screen reader. If it ends you can still try to confirm; if the room has gone meanwhile, the page says so and you can search again.",
+      contactTitle: "Tell us if something stops you",
+      contactBody: (hotelEmail, revioEmail) => `If any part of this page is hard to use, write to the hotel at ${hotelEmail} — they can also take your booking another way. You can reach the makers of this page at ${revioEmail}. We answer within two working days.`,
+      checked: (d) => `Statement prepared ${d}.`,
     },
     consent: {
       label: "Cookies on this page",
@@ -566,12 +611,14 @@ export const guest: Translations<GuestStrings> = {
       accept: "I am 18 or older and accept the booking conditions and the cancellation policy above",
       acceptCard: ", and I understand my card is used as a guarantee",
       privacyNote: (h) => `${h} uses your details to make and manage this booking.`,
+      noWithdrawal: "A stay booked for specific dates has no 14-day right of withdrawal (EU Directive 2011/83, art. 16(l)). You can cancel under the cancellation terms above.",
       privacyLink: "Privacy notice",
       confirming: "Confirming…", sending: "Sending…", confirm: "Confirm booking", request: "Request this room",
       confirmHint: "You’ll get a confirmation by email straight away.",
       requestHint: "You’ll get an email the moment the hotel confirms.",
       holdExpired: "Your hold has expired. You can still try to confirm — the room may well be free.",
       holding: "We’re holding this room for you for",
+      holdWarning: "Two minutes left on your hold. Confirm soon to keep this room.",
     },
     errors: {
       unavailablePage: "This booking page isn't available.",
@@ -752,6 +799,33 @@ export const guest: Translations<GuestStrings> = {
       vatId: (id) => `ЕИК / ДДС № ${id}`,
       privacy: "Поверителност",
       report: "Сигнал за незаконно съдържание",
+      accessibility: "Достъпност",
+    },
+    a11y: {
+      skip: "Към основното съдържание",
+      title: "Достъпност",
+      intro: (h) => `${h} иска всеки да може да резервира престой тук — включително гости, които ползват екранен четец, само клавиатура, увеличение или гласово управление.`,
+      standardTitle: "Стандартът, към който се стремим",
+      standardBody: "Тази страница за резервации се стреми да отговаря на Указанията за достъпност на уеб съдържанието (WCAG) 2.1, ниво AA — стандартът зад Европейския акт за достъпност (EN 301 549). Проверена е от екипа, който я създава, но все още не от външен одитор.",
+      doesTitle: "Какво прави страницата",
+      does: [
+        "Контрастът на текста върху цветовете и снимките на хотела се измерва да е поне 4,5:1 — не се предполага.",
+        "Всяка стъпка работи само с клавиатура, включително изборът на дати в календара със стрелките.",
+        "Всяко поле има видим етикет, а страницата казва на екранния четец на какъв език е.",
+        "Можете да увеличите до пет пъти; нищо не заключва размера на страницата.",
+        "Цената, която виждате първо, е цената, която плащате — с всички данъци и такси.",
+      ],
+      limitsTitle: "Какво знаем, че още не е съвършено",
+      limits: [
+        "Снимките на стаите се качват от хотела и може не всички да имат описание.",
+        "Формата за карта е защитената рамка на Stripe; достъпността ѝ е на Stripe.",
+        "Някои малки бутони, като стрелките на снимките, са по-малки от 44 px, към които се стремим.",
+      ],
+      holdTitle: "Стаята, задържана за Вас",
+      holdBody: "Щом отворите формата за резервация, стаята се задържа за 15 минути, за да не я вземе друг. Две минути преди края Ви казваме — на екрана и на екранния четец. Ако времето изтече, пак можете да опитате да потвърдите; ако междувременно стаята е заета, страницата го казва и можете да потърсите отново.",
+      contactTitle: "Кажете ни, ако нещо Ви спира",
+      contactBody: (hotelEmail, revioEmail) => `Ако някоя част от страницата е трудна за ползване, пишете на хотела на ${hotelEmail} — той може да приеме резервацията Ви и по друг начин. Създателите на страницата са на ${revioEmail}. Отговаряме до два работни дни.`,
+      checked: (d) => `Декларацията е изготвена на ${d}.`,
     },
     consent: {
       label: "Бисквитки на тази страница",
@@ -943,6 +1017,7 @@ export const guest: Translations<GuestStrings> = {
       terms: "Плащане и анулиране",
       accept: "Навършил/а съм 18 години и приемам условията за резервация и правилата за анулиране по-горе",
       privacyNote: (h) => `${h} използва данните Ви, за да направи и обслужва тази резервация.`,
+      noWithdrawal: "За престой на конкретни дати няма право на отказ в 14-дневен срок (чл. 57 от Закона за защита на потребителите). Можете да анулирате според условията за анулиране по-горе.",
       privacyLink: "Информация за поверителност",
       acceptCard: " и разбирам, че картата ми се използва като гаранция",
       confirming: "Потвърждаваме…", sending: "Изпращаме…", confirm: "Потвърди резервацията", request: "Изпрати заявка",
@@ -950,6 +1025,7 @@ export const guest: Translations<GuestStrings> = {
       requestHint: "Ще получите имейл веднага щом хотелът потвърди.",
       holdExpired: "Задържането изтече. Все пак можете да опитате да потвърдите — стаята може още да е свободна.",
       holding: "Задържаме тази стая за Вас още",
+      holdWarning: "Остават две минути от задържането. Потвърдете скоро, за да запазите стаята.",
     },
     errors: {
       unavailablePage: "Тази страница за резервации не е достъпна.",

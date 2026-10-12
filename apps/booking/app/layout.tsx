@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { headers } from "next/headers";
+import { PATH_HEADER } from "@/middleware";
+import { getPublicProperty } from "@/lib/property";
+import { guestLocale } from "@/lib/i18n/server";
 import "./globals.css";
 // Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
 import "./cyrillic-font.css";
@@ -69,9 +73,16 @@ export const viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+/** The guest's language for `<html lang>`: the same negotiation the page itself uses. */
+async function pageLanguage(): Promise<string> {
+  const slug = (await headers()).get(PATH_HEADER)?.split("/")[1] ?? "";
+  const property = slug ? await getPublicProperty(slug) : null;
+  return guestLocale(property?.defaultLanguage ?? "en");
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${jakartaSans.variable} ${instrumentSerif.variable}`}>
+    <html lang={await pageLanguage()} className={`${jakartaSans.variable} ${instrumentSerif.variable}`}>
       <body className="min-h-screen">{children}</body>
     </html>
   );

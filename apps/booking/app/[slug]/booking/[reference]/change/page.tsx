@@ -42,7 +42,7 @@ export default async function ChangeDatesPage({
   return (
     <>
       <PropertyHeader property={property} />
-      <main className="mx-auto w-full max-w-[66rem] px-5 pb-20 pt-8 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[66rem] px-5 pb-20 pt-8 sm:px-8">
         <a href={back} className="link-quiet text-[13.5px]">← {s.manage.back}</a>
         <h1 className="display mt-4 text-[1.9rem] sm:text-[2.3rem]">{s.manage.changeTitle}</h1>
         <p className="mt-2 text-[14.5px]" style={{ color: "hsl(var(--ink-soft))" }}>

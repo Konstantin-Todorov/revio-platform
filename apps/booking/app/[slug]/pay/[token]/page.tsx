@@ -44,7 +44,7 @@ export default async function PayPage({ params }: { params: Promise<{ slug: stri
   return (
     <>
       <PropertyHeader property={property} />
-      <main className="mx-auto w-full max-w-[34rem] px-5 pb-20 pt-10 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[34rem] px-5 pb-20 pt-10 sm:px-8">
         <h1 className="display text-[1.9rem]">{p.title(property.name)}</h1>
         <p className="mt-2 text-[14.5px] leading-relaxed" style={{ color: "hsl(var(--ink-soft))" }}>{p.lead}</p>
 

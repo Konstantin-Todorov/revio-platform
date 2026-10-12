@@ -129,7 +129,7 @@ export default async function BookPage({
     <>
       <PropertyHeader property={property} />
 
-      <main className="mx-auto w-full max-w-[62rem] px-5 pb-20 pt-6 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[62rem] px-5 pb-20 pt-6 sm:px-8">
         <StepBar
           current="Details"
           backHref={`/${slug}/search?checkIn=${checkIn}&checkOut=${checkOut}&guests=${guests}${agesQ}`}

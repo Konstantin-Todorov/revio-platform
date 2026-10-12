@@ -96,6 +96,14 @@ export default async function PropertyLayout({
         } as React.CSSProperties
       }
     >
+      {/* First thing a keyboard reaches: past the hotel's header straight to the page (WCAG 2.4.1). */}
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-[60] focus:rounded-[var(--r-sm)] focus:px-4 focus:py-2.5 focus:text-[14px] focus:font-semibold"
+        style={{ backgroundColor: "hsl(var(--surface))", color: "hsl(var(--ink))", boxShadow: "0 2px 12px rgb(0 0 0 / 0.18)" }}
+      >
+        {s.a11y.skip}
+      </a>
       {children}
       {needsConsent(property.tags) && (
         <Consent slug={property.slug} tags={property.tags}

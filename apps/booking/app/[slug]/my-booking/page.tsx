@@ -21,7 +21,7 @@ export default async function MyBookingPage({ params }: { params: Promise<{ slug
   return (
     <>
       <PropertyHeader property={property} />
-      <main className="mx-auto w-full max-w-[34rem] px-5 pb-20 pt-10 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[34rem] px-5 pb-20 pt-10 sm:px-8">
         <span className="flex h-12 w-12 items-center justify-center rounded-full"
               style={{ backgroundColor: "hsl(var(--brand-wash))", color: "hsl(var(--brand-text))" }}>
           <Ticket size={22} aria-hidden />

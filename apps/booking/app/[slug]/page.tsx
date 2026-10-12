@@ -55,7 +55,7 @@ export default async function PropertyPage({ params }: { params: Promise<{ slug:
     <>
       <PropertyHeader property={property} />
 
-      <main>
+      <main id="main" tabIndex={-1}>
         {/*
           NOT `overflow-hidden`. The search bar's calendar and guest popovers are absolutely
           positioned children of this section, and they extend past the hero band by design — a

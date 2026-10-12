@@ -78,7 +78,7 @@ export async function GroupBook({ property, sp }: { property: PublicProperty; sp
   return (
     <>
       <PropertyHeader property={property} />
-      <main className="mx-auto w-full max-w-[62rem] px-5 pb-20 pt-6 sm:px-8">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-[62rem] px-5 pb-20 pt-6 sm:px-8">
         <StepBar current="Details" backHref={back} s={s.steps} />
         <h1 className="display mt-6 text-[1.85rem] sm:mt-8 sm:text-[2.4rem]">{s.book.title}</h1>
         <p className="mt-2 text-[14px]" style={{ color: "hsl(var(--ink-soft))" }}>
