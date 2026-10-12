@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { FavouriteStar, useCollapsedGroups, useFavourites } from "@revio/ui/favourites";
+import { ChevronDown } from "lucide-react";
 import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
@@ -68,18 +70,23 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
   const { open, setOpen } = useShell();
   const activeHref = bestMatch(pathname);
   const t = translate(shell, useLocale());
+  const [favs, toggleFav] = useFavourites("link");
+  const [collapsed, toggleGroup] = useCollapsedGroups("link");
+  const allItems = SECTIONS.flatMap((x) => x.items);
+  const favItems = favs.map((h) => allItems.find((it) => it.href === h)).filter((it): it is Item => Boolean(it));
 
-  const renderItems = (items: Item[]) =>
+  const renderItems = (items: Item[], starrable = true) =>
     items.map((item) => {
       const active = item.href === activeHref;
       const Icon = item.icon;
+      const starred = favs.includes(item.href);
       return (
+        <div key={item.href} className="group/row relative flex items-center">
         <Link
-          key={item.href}
           href={item.href}
           onClick={() => setOpen(false)}
           aria-current={active ? "page" : undefined}
-          className={`group relative ${NAV_ROW_CLASS} flex items-center gap-3 rounded-lg text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+          className={`group relative ${NAV_ROW_CLASS} flex flex-1 items-center gap-3 rounded-lg ${starrable ? "pr-9" : ""} text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
             active ? "bg-product-mark/[0.14] text-white" : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
           }`}
         >
@@ -104,8 +111,34 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
             </span>
           ) : null}
         </Link>
+        {starrable && (
+          <span className="absolute right-1">
+            <FavouriteStar on={starred} label={starred ? t.chrome.removeFavourite : t.chrome.addFavourite} onToggle={() => toggleFav(item.href)} />
+          </span>
+        )}
+        </div>
       );
     });
+
+  const group = (key: string, heading: string | null, items: Item[]) => {
+    const shut = heading !== null && collapsed.includes(key) && !items.some((it) => it.href === activeHref);
+    return (
+      <div key={key} className="mb-1">
+        {heading && (
+          <button
+            type="button"
+            onClick={() => toggleGroup(key)}
+            aria-expanded={!shut}
+            className={`${NAV_HEADING_CLASS} flex w-full items-center gap-1 text-left text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35 hover:text-white/60`}
+          >
+            <span className="flex-1">{heading}</span>
+            <ChevronDown className={`h-3 w-3 transition-transform ${shut ? "-rotate-90" : ""}`} aria-hidden />
+          </button>
+        )}
+        {!shut && renderItems(items)}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -118,7 +151,7 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-200 lg:translate-x-0 lg:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col overflow-x-hidden max-lg:overflow-y-auto max-lg:overscroll-contain bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-200 lg:translate-x-0 lg:transition-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -142,22 +175,14 @@ export function Sidebar({ connectivityLabel }: { connectivityLabel: string }) {
         </button>
       </div>
 
-      <nav className={`min-h-0 flex-1 px-3 pb-2 ${NAV_SCROLL_CLASS}`}>
-        {SECTIONS.map((section, i) => (
-          <div key={i} className="mb-1">
-            {section.title && (
-              <div className={`${NAV_HEADING_CLASS} text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35`}>
-                {t.sections[section.title]}
-              </div>
-            )}
-            {renderItems(section.items)}
-          </div>
-        ))}
+      <nav className={`min-h-0 flex-1 overflow-x-hidden px-3 pb-2 max-lg:flex-none max-lg:overflow-visible ${NAV_SCROLL_CLASS}`}>
+        {favItems.length > 0 && group("favourites", t.chrome.favourites, favItems)}
+        {SECTIONS.map((section, i) => group(section.title ?? `top-${i}`, section.title ? t.sections[section.title] : null, section.items))}
       </nav>
 
       {/* Bottom-anchored Account group (spec §2) — admin, not daily operations. */}
       <div className="border-t border-white/10 px-3 pb-3">
-        {renderItems(ACCOUNT_SECTION.items)}
+        {renderItems(ACCOUNT_SECTION.items, false)}
       </div>
 
       {/* Says what this hotel's connection actually is — a paying client never sees the word "demo"

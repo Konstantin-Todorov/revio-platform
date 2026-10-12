@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import type { ProductName, SetupFacts } from "@revio/core";
 import { deriveStayState, todayInTimeZone } from "@revio/core";
 import { prisma } from "./db";
@@ -270,7 +271,8 @@ export interface AssignmentConflict { unitLabel: string; guests: string[] }
  * reservation's *sold* status still never changes, because that belongs to the CRS. Flags
  * double-assignment conflicts.
  */
-export async function getFrontDeskOverview() {
+/** Cached per request: the dashboard, the bell and the bottom bar's badge all read it on one load. */
+export const getFrontDeskOverview = cache(async () => {
   const { property } = await activeProperty();
   const today = todayInTz(property.timezone);
 
@@ -474,7 +476,7 @@ export async function getFrontDeskOverview() {
       conflictCount: conflicts.length,
     },
   };
-}
+});
 
 export interface AvailableUnit {
   id: string;

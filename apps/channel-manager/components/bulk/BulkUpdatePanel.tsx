@@ -212,7 +212,7 @@ export function BulkUpdatePanel({
   const cols = compact ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-2";
 
   return (
-    <div className={compact ? "" : "rounded-lg border border-surface-border bg-white p-5 shadow-card"}>
+    <div data-new="bulk" className={compact ? "" : "rounded-lg border border-surface-border bg-white p-5 shadow-card"}>
       <div className={`grid gap-5 ${cols}`}>
         {/* Scope */}
         <div className="space-y-4">

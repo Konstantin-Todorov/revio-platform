@@ -4,6 +4,7 @@ import { MobileMenuButton } from "./MobileMenuButton";
 import { TopbarSearch } from "./TopbarSearch";
 import { NotificationBell } from "./NotificationBell";
 import { UserMenu } from "./UserMenu";
+import { AppBack, CreateButton, ScreenTitle, type ChromeCreate, type ChromeStrings } from "@revio/ui/app-chrome";
 import type { ProductLink, ProductUpsell } from "@revio/ui/product-links";
 import type { Locale } from "@revio/ui/i18n";
 import type { UserMenuStrings } from "./UserMenu";
@@ -16,7 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 export function Topbar({
-  properties, activeId, activeName, role, userName, feed, timeZone, products, upsells, locale = "en", t,
+  properties, activeId, activeName, role, userName, feed, timeZone, products, upsells, locale = "en", t, chrome,
 }: {
   properties: Property[];
   activeId: string;
@@ -30,11 +31,16 @@ export function Topbar({
   locale?: Locale;
   /** Translated menu strings and role names — `lib/i18n/shell.ts`. */
   t?: { menu: UserMenuStrings; roles: Record<string, string>; search: string };
+  /** "+ New", the phone's screen title and "← Back" — the shared frame in `@revio/ui/app-chrome`. */
+  chrome: { create: ChromeCreate[]; strings: ChromeStrings; titles: { href: string; label: string }[]; roots: string[] };
 }) {
   return (
     <header className="sticky top-0 z-20 flex h-[60px] items-center gap-3 border-b border-surface-border bg-white/95 px-4 backdrop-blur lg:gap-4 lg:px-6">
       <MobileMenuButton />
+      <AppBack label={chrome.strings.back} roots={chrome.roots} />
+      <ScreenTitle nav={chrome.titles} fallback="RevioPMS" />
       <TopbarSearch activePropertyId={activeId} {...(t ? { placeholder: t.search } : {})} />
+      <CreateButton items={chrome.create} t={chrome.strings} />
 
       <div className="ml-auto">
         <WorkspaceSwitcher properties={properties} activeId={activeId} activeName={activeName} />

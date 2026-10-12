@@ -113,3 +113,26 @@ So nothing may be written in a way that only works for two languages:
   account menu), the *guests'* mail (`Property.defaultLanguage`, Settings → Guest emails), and the
   *team's* mail (`teamLocale` in `@revio/db` — the reader's own panel language, else the owner's).
   A screen that shows one of them says which it is.
+
+## The frame on a phone and "+ New" (`app-chrome.tsx`, `favourites.tsx`, `mobile.css`, 2026-10-12)
+
+One implementation for all four staff products, so a hotel finds the same thing in the same place.
+
+- **Bottom bar below `lg`**: up to four destinations around a large "+", and "More" opening the drawer.
+  **The product and the ROLE decide the buttons, never the person** — a desk phone is shared across a
+  shift and a bar must be reachable by memory. Each app builds its tabs in `lib/chrome.ts`. A role
+  with one screen (housekeeper, outlet/POS) gets **no bar**. Numbers on a tab are what is waiting
+  there (arrivals, rooms to clean, open repairs, unresolved sync errors).
+- **"+ New"** (desk top bar and the phone's "+") lists only what that role may create, and lands on
+  `?new=1` or `?new=<name>`; the target control carries `data-new` / `data-new="<name>"`. `FocusNew`
+  waits until React has hydrated the control before clicking it — a trigger clicked from the server
+  HTML does nothing.
+- **Drawer on a phone**: one scroll for the whole menu (Settings at the end, not pinned in a second
+  scroll area), no sideways movement, page behind locked, opens with a swipe from the left edge and
+  from "More" (`revio:menu` event). The desk keeps the pinned tail.
+- **Favourites and collapsible groups** in the sidebar, remembered per device in `localStorage`.
+  Not in the Operator console, whose desk menu is a two-level rail.
+- **Installed on a home screen** (`app/manifest.ts` in each app): `AppBack` shows "← Back" only in
+  standalone mode and not on the bar's own screens.
+- **`mobile.css`**: below 768px an icon-only button or a checkbox gets a 40px touch area; the drawn
+  size does not change.

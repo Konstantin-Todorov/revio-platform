@@ -84,7 +84,7 @@ export function ConnectChannelDialog({
 
   return (
     <>
-      <button
+      <button data-new="channel"
         onClick={() => setOpen(true)}
         className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3.5 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-brand-700"
       >

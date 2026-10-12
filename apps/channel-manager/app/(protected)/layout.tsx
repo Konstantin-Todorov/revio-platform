@@ -3,6 +3,8 @@ import { productLinks, productUpsells } from "@revio/ui/product-links";
 import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellProvider } from "@/components/shell/ShellContext";
+import { linkChrome } from "@/lib/chrome";
+import { BottomBar, BOTTOM_BAR_SPACE, FocusNew } from "@revio/ui/app-chrome";
 import { getSession, getSwitchableProperties } from "@/lib/session";
 import { getConnectivityLabel } from "@/lib/data";
 import { getNotificationFeed } from "@/lib/notifications";
@@ -109,6 +111,13 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       )
     : null;
 
+  const { tabs, create } = await linkChrome(session.activePropertyId, t.chrome);
+  const chromeStrings = {
+    more: t.chrome.more, create: t.chrome.create, createHeading: t.chrome.createHeading,
+    close: t.chrome.close, back: t.chrome.back, menu: t.chrome.bar,
+  };
+  const titles = Object.entries(t.nav).map(([href, label]) => ({ href, label }));
+
   return (
     <ShellProvider>
       {/* The document scrolls. The sidebar is fixed and the topbar is sticky, so the chrome
@@ -117,13 +126,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar connectivityLabel={connectivityLabel} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} roleLabel={t.roles[session.role] ?? session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} canSwitchLanguage={translationOn()} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} roleLabel={t.roles[session.role] ?? session.role} userName={session.userName} feed={feed} timeZone={activeTimeZone} canSwitchLanguage={translationOn()} chrome={{ create, strings: chromeStrings, titles, roots: tabs.map((x) => x.href) }} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate
               documentElement.scrollHeight past the viewport — the window then scrolls into that empty
               region and drags the fixed-height shell up ("dead space / the page looks broken"). */}
-          <main className="relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6">
+          <main className={`relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6 ${BOTTOM_BAR_SPACE}`}>
+            <FocusNew />
             {/* Keyed by the property in view — switching hotels re-renders the server components but
                 leaves CLIENT components mounted, holding the previous hotel's form values. A form
                 pre-filled from hotel A and submitted under hotel B writes A's values onto B. */}
@@ -148,6 +158,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           </main>
         </div>
       </div>
+      <BottomBar tabs={tabs} create={create} t={chromeStrings} />
     </ShellProvider>
   );
 }

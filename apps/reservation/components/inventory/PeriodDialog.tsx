@@ -28,7 +28,7 @@ export function PeriodDialog({
 
   return (
     <>
-      <button
+      <button data-new
         onClick={() => setOpen(true)}
         className="flex h-8 items-center gap-1.5 rounded-md bg-brand-800 px-3 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700"
       >

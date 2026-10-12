@@ -47,7 +47,7 @@ export function RestrictionDialog({ rule, today, roomTypes, channels }: { rule?:
           <Pencil className="h-3.5 w-3.5" />
         </button>
       ) : (
-        <button onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
+        <button data-new onClick={() => setOpen(true)} className="inline-flex items-center gap-1.5 rounded-md bg-brand-800 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand-700">
           <Plus className="h-4 w-4" /> {d.add}
         </button>
       )}

@@ -59,7 +59,7 @@ export default async function MaintenancePage({ searchParams }: { searchParams: 
         <h3 className="mb-3 text-[13px] font-bold text-ink-900">{m.newTask}</h3>
         {/* Two columns on a phone, one row on a desk: the fixed widths that suit a desk left the fault field
             narrow and cut "Нормален" to "Нормал" at 375px. */}
-        <form action={createMaintenanceTask} className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+        <form data-new action={createMaintenanceTask} className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
           <label className="col-span-2 flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-ink-600">{m.whatsWrong}</span>
             <input name="title" required placeholder={m.whatsWrongPlaceholder} className={`${inputCls} w-full sm:w-52`} />

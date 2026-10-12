@@ -33,11 +33,13 @@ export function WorkspaceSwitcher({ properties, activeId, activeName }: { proper
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex items-center gap-2.5 rounded-md border border-surface-border bg-white px-3 py-1.5 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-surface-muted"
+        aria-label={activeName}
+        className="flex h-10 items-center gap-2.5 rounded-md border border-surface-border bg-white px-2.5 text-[13px] font-semibold text-ink-900 transition-colors hover:bg-surface-muted md:h-auto md:px-3 md:py-1.5"
       >
         <Building2 className="h-4 w-4 text-brand-600" />
-        {activeName}
-        <ChevronDown className="h-4 w-4 text-ink-400" />
+        {/* On a phone the screen's name owns the bar; the hotel stays one tap away. */}
+        <span className="hidden max-w-[220px] truncate md:inline">{activeName}</span>
+        <ChevronDown className="hidden h-4 w-4 text-ink-400 md:block" />
       </button>
 
       {open && (

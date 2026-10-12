@@ -1,0 +1,27 @@
+/*
+ * Phones, every staff app — imported once by each app's root layout so the four cannot drift.
+ *
+ * A finger needs about 40px; a mouse needs far less, which is how small icon buttons (⋯ menus, close
+ * crosses, row actions) and bare checkboxes ended up at 24–32px. Below 768px they get a 40px touch area
+ * without changing how they look: the box grows, the icon stays the size it was drawn.
+ */
+@media (max-width: 767px) {
+  button:has(> svg:only-child),
+  a:has(> svg:only-child),
+  [role="button"]:has(> svg:only-child) {
+    min-width: 40px;
+    min-height: 40px;
+  }
+
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  /* A label that wraps a checkbox is the real target — make the whole row tappable at 40px. */
+  label:has(> input[type="checkbox"]),
+  label:has(> input[type="radio"]) {
+    min-height: 40px;
+  }
+}

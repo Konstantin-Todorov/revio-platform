@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
+import { FavouriteStar, useCollapsedGroups, useFavourites } from "@revio/ui/favourites";
+import { ChevronDown } from "lucide-react";
 import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
 import { translate } from "@revio/ui/i18n";
 import { useLocale } from "@revio/ui/i18n-context";
@@ -67,21 +69,37 @@ export function Sidebar({ footer }: { footer: string }) {
   // Labels come from the dictionary by route; the English in SECTIONS is only the fallback shape.
   const t = translate(shell, useLocale());
   const { open, setOpen } = useShell();
+  const [favs, toggleFav] = useFavourites("crs");
+  const [collapsed, toggleGroup] = useCollapsedGroups("crs");
+  const isActive = (href: string) => pathname === href || pathname.startsWith(href + "/");
   /*
    * One section, rendered from a named function so the TAIL can live outside the scrolling
    * region without a single line of this JSX being duplicated. Two copies of a nav row diverge,
    * and the copy that diverges is the one nobody is looking at.
    */
-  const renderSection = (section: (typeof SECTIONS)[number], i: number) => (
+  const allItems = SECTIONS.filter((x) => !x.tail).flatMap((x) => x.items);
+  const favSection = { items: favs.map((h) => allItems.find((it) => it.href === h)).filter((it): it is Item => Boolean(it)) };
+  const renderSection = (section: (typeof SECTIONS)[number], i: number, heading?: string) => (
           <div key={i} /* The pinned wrapper below owns the rule and the padding now, so a tail section
                  styles itself exactly like any other — one fewer thing that can disagree. */
               className="mb-1">
-            {section.title && (
-              <div className={`${NAV_HEADING_CLASS} text-[10px] font-bold uppercase tracking-[0.15em] text-white/30`}>
-                {t.sections[section.title]}
-              </div>
-            )}
-            {section.items.map((raw) => {
+            {(section.title || heading) && (() => {
+              const key = section.title ?? "favourites";
+              const shut = collapsed.includes(key) && !section.items.some((it) => isActive(it.href));
+              return (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(key)}
+                  aria-expanded={!shut}
+                  className={`${NAV_HEADING_CLASS} flex w-full items-center gap-1 text-left text-[10px] font-bold uppercase tracking-[0.15em] text-white/30 hover:text-white/60`}
+                >
+                  <span className="flex-1">{heading ?? (section.title ? t.sections[section.title] : "")}</span>
+                  <ChevronDown className={`h-3 w-3 transition-transform ${shut ? "-rotate-90" : ""}`} aria-hidden />
+                </button>
+              );
+            })()}
+            {!((section.title || heading) && collapsed.includes(section.title ?? "favourites") && !section.items.some((it) => isActive(it.href))) &&
+            section.items.map((raw) => {
               const item = { ...raw, label: t.nav[raw.href] ?? raw.label };
               const Icon = item.icon;
               if (item.soon) {
@@ -99,10 +117,11 @@ export function Sidebar({ footer }: { footer: string }) {
                   </div>
                 );
               }
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const active = isActive(item.href);
+              const starred = favs.includes(item.href);
               return (
+                <div key={item.href} className="group/row relative flex items-center">
                 <Link
-                  key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
@@ -112,7 +131,7 @@ export function Sidebar({ footer }: { footer: string }) {
                    * whole nav feel like a static list rather than something you are operating.
                    * The focus ring is rule 2: there were two on the entire platform.
                    */
-                  className={`group relative ${NAV_ROW_CLASS} flex items-center gap-3 rounded-lg text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+                  className={`group relative ${NAV_ROW_CLASS} flex flex-1 items-center gap-3 rounded-lg pr-9 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
                     active
                       ? "bg-product-mark/[0.14] text-white"
                       : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
@@ -138,6 +157,12 @@ export function Sidebar({ footer }: { footer: string }) {
                   />
                   <span className="flex-1">{item.label}</span>
                 </Link>
+                {!section.tail && (
+                  <span className="absolute right-1">
+                    <FavouriteStar on={starred} label={starred ? t.chrome.removeFavourite : t.chrome.addFavourite} onToggle={() => toggleFav(item.href)} />
+                  </span>
+                )}
+                </div>
               );
             })}
           </div>
@@ -154,7 +179,7 @@ export function Sidebar({ footer }: { footer: string }) {
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col border-r border-white/[0.06] bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-enter ease-out lg:translate-x-0 lg:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col overflow-x-hidden max-lg:overflow-y-auto max-lg:overscroll-contain border-r border-white/[0.06] bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-enter ease-out lg:translate-x-0 lg:transition-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -183,8 +208,9 @@ export function Sidebar({ footer }: { footer: string }) {
         Help · Settings group belongs at the foot of the sidebar, where it is the same target in
         every product whatever is above it.
       */}
-            <nav className={`min-h-0 flex-1 px-3 pb-2 ${NAV_SCROLL_CLASS}`}>
-        {SECTIONS.filter((x) => !x.tail).map(renderSection)}
+            <nav className={`min-h-0 flex-1 overflow-x-hidden px-3 pb-2 max-lg:flex-none max-lg:overflow-visible ${NAV_SCROLL_CLASS}`}>
+        {favSection.items.length > 0 && renderSection(favSection, -1, t.chrome.favourites)}
+        {SECTIONS.filter((x) => !x.tail).map((sec, i) => renderSection(sec, i))}
       </nav>
 
       {/*
@@ -198,7 +224,7 @@ export function Sidebar({ footer }: { footer: string }) {
         reachable without anybody discovering anything.
       */}
       <div className="border-t border-white/10 px-3 py-2">
-        {SECTIONS.filter((x) => x.tail).map(renderSection)}
+        {SECTIONS.filter((x) => x.tail).map((sec, i) => renderSection(sec, i))}
       </div>
 
 

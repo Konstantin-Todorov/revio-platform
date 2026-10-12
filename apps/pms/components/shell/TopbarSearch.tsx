@@ -22,7 +22,7 @@ import { setActiveProperty } from "@/lib/actions-session";
 export function TopbarSearch({ activePropertyId, placeholder = "Search rooms, guests, reservations…" }: { activePropertyId: string; placeholder?: string }) {
   const router = useRouter();
   return (
-    <div className="flex flex-1 justify-start">
+    <div className="flex justify-start md:flex-1">
       <CommandPalette
         search={searchEverything}
         placeholder={placeholder}

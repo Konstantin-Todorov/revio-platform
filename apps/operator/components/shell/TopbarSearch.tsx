@@ -16,7 +16,7 @@ import { searchEverything } from "@/lib/actions-search";
 export function TopbarSearch() {
   const router = useRouter();
   return (
-    <div className="flex flex-1 justify-start">
+    <div className="flex justify-start md:flex-1">
       <CommandPalette
         search={searchEverything}
         placeholder="Search clients, hotels, people, invoices…"

@@ -22,6 +22,13 @@ export interface ShellStrings {
   switcher: { yourProperties: string; allProperties: string; portfolioTotals: string };
   pick: { title: string; bodyBefore: string; allProperties: string; bodyAfter: string; note: string };
   keep: { pending: string; label: string };
+  /** The phone's bottom bar, "+ New", "← Back" and favourites — see `lib/chrome.ts`. */
+  chrome: {
+    dashboard: string; reservations: string; availability: string;
+    more: string; create: string; createHeading: string; close: string; back: string; bar: string;
+    reservation: string; closeDates: string; restriction: string;
+    favourites: string; addFavourite: string; removeFavourite: string;
+  };
 }
 
 export const shell: Translations<ShellStrings> = {
@@ -50,6 +57,12 @@ export const shell: Translations<ShellStrings> = {
       maintenance: "Maintenance", outlet_pos: "Outlet / POS",
     },
     search: "Search reservations, guests, rooms, rates…",
+    chrome: {
+      dashboard: "Dashboard", reservations: "Reservations", availability: "Availability",
+      more: "More", create: "New", createHeading: "Create", close: "Close", back: "Back", bar: "Main screens",
+      reservation: "Reservation", closeDates: "Close dates", restriction: "Restriction",
+      favourites: "Favourites", addFavourite: "Add to favourites", removeFavourite: "Remove from favourites",
+    },
     switcher: { yourProperties: "Your properties", allProperties: "All properties", portfolioTotals: "· portfolio totals" },
     pick: {
       title: "This screen belongs to one hotel",
@@ -85,6 +98,12 @@ export const shell: Translations<ShellStrings> = {
       maintenance: "Поддръжка", outlet_pos: "Точка на продажба",
     },
     search: "Търсене на резервации, гости, стаи, цени…",
+    chrome: {
+      dashboard: "Табло", reservations: "Резервации", availability: "Наличност",
+      more: "Още", create: "Ново", createHeading: "Създай", close: "Затвори", back: "Назад", bar: "Основни екрани",
+      reservation: "Резервация", closeDates: "Затваряне на дати", restriction: "Ограничение",
+      favourites: "Любими", addFavourite: "Добави в любими", removeFavourite: "Махни от любими",
+    },
     switcher: { yourProperties: "Вашите обекти", allProperties: "Всички обекти", portfolioTotals: "· общо за групата" },
     pick: {
       title: "Този екран е за един хотел",

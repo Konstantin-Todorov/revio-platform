@@ -23,6 +23,13 @@ export interface ShellStrings {
   search: string;
   switcher: { yourProperties: string };
   keep: { pending: string; label: string };
+  /** The phone's bottom bar, "+ New", "← Back" and favourites — see `lib/chrome.ts`. */
+  chrome: {
+    dashboard: string; calendar: string; sync: string;
+    more: string; create: string; createHeading: string; close: string; back: string; bar: string;
+    bulk: string; restriction: string; channel: string;
+    favourites: string; addFavourite: string; removeFavourite: string;
+  };
   /** The line under the nav that says what this hotel's connection really is. */
   connectivity: {
     none: string;
@@ -58,6 +65,12 @@ export const shell: Translations<ShellStrings> = {
     search: "Search rooms, rates, channels, reservations…",
     switcher: { yourProperties: "Your properties" },
     keep: { pending: "Letting them know…", label: "I want to keep it" },
+    chrome: {
+      dashboard: "Dashboard", calendar: "Calendar", sync: "Sync",
+      more: "More", create: "New", createHeading: "Create", close: "Close", back: "Back", bar: "Main screens",
+      bulk: "Bulk change", restriction: "Restriction", channel: "Channel",
+      favourites: "Favourites", addFavourite: "Add to favourites", removeFavourite: "Remove from favourites",
+    },
     connectivity: {
       none: "No channels connected",
       live: (n) => `Live · ${n} channel${n === 1 ? "" : "s"}`,
@@ -90,6 +103,12 @@ export const shell: Translations<ShellStrings> = {
     search: "Търсене на стаи, цени, канали, резервации…",
     switcher: { yourProperties: "Вашите обекти" },
     keep: { pending: "Уведомяваме ги…", label: "Искам да го запазя" },
+    chrome: {
+      dashboard: "Табло", calendar: "Календар", sync: "Синхронизация",
+      more: "Още", create: "Ново", createHeading: "Създай", close: "Затвори", back: "Назад", bar: "Основни екрани",
+      bulk: "Масова промяна", restriction: "Ограничение", channel: "Канал",
+      favourites: "Любими", addFavourite: "Добави в любими", removeFavourite: "Махни от любими",
+    },
     connectivity: {
       none: "Няма свързани канали",
       live: (n) => `Реална връзка · ${n} ${n === 1 ? "канал" : "канала"}`,

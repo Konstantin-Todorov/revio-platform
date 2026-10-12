@@ -34,7 +34,7 @@ export function MobileNav() {
         </div>
       </div>
 
-      <nav aria-label="Operator navigation" className="flex-1 overflow-y-auto px-3 pb-4">
+      <nav aria-label="Operator navigation" className="flex-1 overflow-y-auto overflow-x-hidden overscroll-contain px-3 pb-4">
         {OPERATOR_AREAS.map((area) => {
           const isCurrent = current?.key === area.key;
           const Icon = area.icon;

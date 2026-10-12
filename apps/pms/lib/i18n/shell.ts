@@ -22,6 +22,13 @@ export interface ShellStrings {
   search: string;
   /** The line under the wordmark. */
   product: string;
+  /** The phone's bottom bar, "+ New", "← Back" and favourites — see `lib/chrome.ts`. */
+  chrome: {
+    today: string; calendar: string; rooms: string; housekeeping: string; tasks: string;
+    more: string; create: string; createHeading: string; close: string; back: string; bar: string;
+    walkIn: string; fault: string; newTask: string;
+    favourites: string; addFavourite: string; removeFavourite: string;
+  };
 }
 
 export const shell: Translations<ShellStrings> = {
@@ -48,6 +55,12 @@ export const shell: Translations<ShellStrings> = {
     menu: { account: "Account menu", settings: "Settings", logOut: "Log out", language: "Language", openMenu: "Open menu", closeMenu: "Close menu" },
     search: "Search rooms, guests, reservations…",
     product: "Operations",
+    chrome: {
+      today: "Today", calendar: "Calendar", rooms: "Rooms", housekeeping: "Housekeeping", tasks: "Tasks",
+      more: "More", create: "New", createHeading: "Create", close: "Close", back: "Back", bar: "Main screens",
+      walkIn: "Walk-in guest", fault: "Report a fault", newTask: "New task",
+      favourites: "Favourites", addFavourite: "Add to favourites", removeFavourite: "Remove from favourites",
+    },
     roles: {
       owner: "Owner", admin: "Admin", revenue_manager: "Revenue Mgr", distribution_manager: "Distribution", read_only: "Read-only",
       manager: "Manager", reception: "Reception", housekeeper: "Housekeeper", hk_supervisor: "Housekeeping lead",
@@ -76,6 +89,12 @@ export const shell: Translations<ShellStrings> = {
     businessDate: (date) => `Работна дата · ${date}`,
     search: "Търсене на стаи, гости, резервации…",
     product: "Операции",
+    chrome: {
+      today: "Днес", calendar: "Календар", rooms: "Стаи", housekeeping: "Хаускийпинг", tasks: "Задачи",
+      more: "Още", create: "Ново", createHeading: "Създай", close: "Затвори", back: "Назад", bar: "Основни екрани",
+      walkIn: "Гост без резервация", fault: "Сигнал за повреда", newTask: "Нова задача",
+      favourites: "Любими", addFavourite: "Добави в любими", removeFavourite: "Махни от любими",
+    },
     menu: { account: "Меню на профила", settings: "Настройки", logOut: "Изход", language: "Език", openMenu: "Отваряне на менюто", closeMenu: "Затваряне на менюто" },
     roles: {
       owner: "Собственик", admin: "Администратор", revenue_manager: "Приходи", distribution_manager: "Дистрибуция", read_only: "Само преглед",

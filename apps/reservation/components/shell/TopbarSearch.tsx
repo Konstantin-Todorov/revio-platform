@@ -29,7 +29,7 @@ export function TopbarSearch({ activePropertyId }: { activePropertyId: string })
   if (pathname?.startsWith("/inventory")) return <div className="hidden flex-1 md:block" aria-hidden />;
 
   return (
-    <div className="flex flex-1 justify-start">
+    <div className="flex justify-start md:flex-1">
       <CommandPalette
         search={searchEverything}
         placeholder={t.search}

@@ -34,7 +34,7 @@ export default async function WalkInPage({ searchParams }: { searchParams: Promi
             {s.walkin.needsSetup}
           </p>
         ) : (
-          <form action={walkIn} className="space-y-4">
+          <form data-new action={walkIn} className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-ink-600">{s.walkin.firstName}</span>

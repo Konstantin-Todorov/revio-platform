@@ -9,6 +9,8 @@ import { Logo } from "./Logo";
 import { useShell } from "./ShellContext";
 import { NAV_HEADING_CLASS, NAV_ROW_CLASS, NAV_SCROLL_CLASS, navTail } from "@revio/ui/nav-tail";
 import { roleAllowsPath } from "@/lib/roles";
+import { FavouriteStar, useCollapsedGroups, useFavourites } from "@revio/ui/favourites";
+import { ChevronDown } from "lucide-react";
 
 type Item = { href: string; label: string; icon: LucideIcon; soon?: string };
 type SectionKey = "frontOffice" | "roomsHousekeeping" | "setup" | "endOfDay";
@@ -19,6 +21,8 @@ export type SidebarStrings = {
   nav: Partial<Record<string, string>>;
   menu: { closeMenu: string };
   product?: string;
+  /** Favourites — remembered per device, see `@revio/ui/favourites`. */
+  fav?: { title: string; add: string; remove: string };
 };
 
 // Nav regrouped to the roles that use each area (spec §2): Front Office (reception) · Rooms &
@@ -75,6 +79,8 @@ const SECTIONS: { title?: string; titleKey?: SectionKey; tail?: boolean; items: 
 export function Sidebar({ role, footer, t }: { role: string; footer: string; t?: SidebarStrings }) {
   const pathname = usePathname();
   const { open, setOpen } = useShell();
+  const [favs, toggleFav] = useFavourites("pms");
+  const [collapsed, toggleGroup] = useCollapsedGroups("pms");
   // Scoped roles (housekeeper, outlet/POS…) see only their allowed sections (spec §3.4 / §3.7).
   // Labels by route from the translated frame; the English literal stays as the fallback.
   const sections = SECTIONS
@@ -84,6 +90,8 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
       items: s.items.filter((i) => roleAllowsPath(role, i.href)).map((i) => ({ ...i, label: t?.nav[i.href] ?? i.label })),
     }))
     .filter((s) => s.items.length > 0);
+  const allowed = sections.filter((x) => !x.tail).flatMap((x) => x.items);
+  const favItems = favs.map((h) => allowed.find((i) => i.href === h)).filter((i): i is Item => Boolean(i));
   /*
    * One section, rendered from a named function so the TAIL can live outside the scrolling
    * region without a single line of this JSX being duplicated. Two copies of a nav row diverge,
@@ -93,12 +101,23 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
           <div key={i} /* The pinned wrapper below owns the rule and the padding now, so a tail section
                  styles itself exactly like any other — one fewer thing that can disagree. */
               className="mb-1">
-            {section.title && (
-              <div className={`${NAV_HEADING_CLASS} text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35`}>
-                {section.title}
-              </div>
-            )}
-            {section.items.map((item) => {
+            {section.title && (() => {
+              const key = section.titleKey ?? section.title;
+              const shut = collapsed.includes(key) && !section.items.some((it) => pathname === it.href || pathname.startsWith(it.href + "/"));
+              return (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(key)}
+                  aria-expanded={!shut}
+                  className={`${NAV_HEADING_CLASS} flex w-full items-center gap-1 text-left text-[10px] font-semibold uppercase tracking-[0.13em] text-white/35 hover:text-white/60`}
+                >
+                  <span className="flex-1">{section.title}</span>
+                  <ChevronDown className={`h-3 w-3 transition-transform ${shut ? "-rotate-90" : ""}`} aria-hidden />
+                </button>
+              );
+            })()}
+            {!(section.title && collapsed.includes(section.titleKey ?? section.title) && !section.items.some((it) => pathname === it.href || pathname.startsWith(it.href + "/"))) &&
+            section.items.map((item) => {
               const Icon = item.icon;
               if (item.soon) {
                 return (
@@ -116,13 +135,14 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
                 );
               }
               const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const starred = favs.includes(item.href);
               return (
+                <div key={item.href} className="group/row relative flex items-center">
                 <Link
-                  key={item.href}
                   href={item.href}
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
-                  className={`group relative ${NAV_ROW_CLASS} flex items-center gap-3 rounded-lg text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
+                  className={`group relative ${NAV_ROW_CLASS} flex flex-1 items-center gap-3 rounded-lg pr-9 text-[13.5px] font-medium outline-none transition-[background-color,color,transform] duration-base ease-standard focus-visible:ring-2 focus-visible:ring-product-mark/70 ${
                     active ? "bg-product-mark/[0.14] text-white" : "text-white/70 hover:translate-x-0.5 hover:bg-white/[0.07] hover:text-white"
                   }`}
                 >
@@ -140,6 +160,12 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
                   />
                   <span className="flex-1">{item.label}</span>
                 </Link>
+                {!section.tail && t?.fav && (
+                  <span className="absolute right-1">
+                    <FavouriteStar on={starred} label={starred ? t.fav.remove : t.fav.add} onToggle={() => toggleFav(item.href)} />
+                  </span>
+                )}
+                </div>
               );
             })}
           </div>
@@ -156,7 +182,7 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
         aria-hidden="true"
       />
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-200 lg:translate-x-0 lg:transition-none ${
+        className={`fixed inset-y-0 left-0 z-40 flex h-screen w-[248px] transform flex-col overflow-x-hidden max-lg:overflow-y-auto max-lg:overscroll-contain bg-gradient-to-b from-brand-900 to-brand-800 text-white/90 transition-transform duration-200 lg:translate-x-0 lg:transition-none ${
           open ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -185,7 +211,9 @@ export function Sidebar({ role, footer, t }: { role: string; footer: string; t?:
         Settings sit at the foot of the sidebar in all three products, which is what makes Settings
         the same target everywhere without anybody reading the label.
       */}
-            <nav className={`min-h-0 flex-1 px-3 pb-2 ${NAV_SCROLL_CLASS}`}>
+            <nav className={`min-h-0 flex-1 overflow-x-hidden px-3 pb-2 max-lg:flex-none max-lg:overflow-visible ${NAV_SCROLL_CLASS}`}>
+        {favItems.length > 0 && t?.fav &&
+          renderSection({ title: t.fav.title, titleKey: undefined, items: favItems, tail: false } as (typeof sections)[number], -1)}
         {sections.filter((x) => !x.tail).map(renderSection)}
       </nav>
 

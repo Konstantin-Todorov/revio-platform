@@ -474,6 +474,14 @@ says who can move it. Details sit where the link points.
   that never finished setup to first-run, which aborted the walk on the local test property —
   `click-walk` now takes `WALK_PROPERTY` like `route-walk`. Running all five dev servers beside
   `pnpm verify` exhausts local Postgres connections; walk apps one at a time.
+- ~~**Navigation for phones and "+ New", all four staff products**~~ ✅ **2026-10-12** — from Weber OS's
+  frame, approved by the founder with a per-product, per-role table: a bottom bar (4 items around a
+  big "+", "More" opens the menu) with live numbers, the screen's name in the top bar, "+ New" on the
+  desk listing only what the role may create and opening that form focused, favourites and
+  collapsible groups in the sidebar, the menu one scroll with Settings last, swipe from the left
+  edge, the page locked behind it, installable as an app with "← Back" in that mode, 40px touch
+  areas on icon buttons. Housekeeper and outlet roles get no bar. phone-walk at 375px: RevioPMS 218,
+  RevioCRS 206, RevioLink 130, Operator 161 screens and menus, nothing off the edge.
 - ~~**Revenue hints on the RevioCRS dashboard**~~ ✅ **2026-10-11** — "Подсказки за цените": which nights to
   raise and which to fill, each with the numbers behind it and a link to the night. Four rules, stated
   in `core/metrics/revenue-hints.ts` (21 tests): filling fast (≥ 75% sold or fast 7-day pickup, a week

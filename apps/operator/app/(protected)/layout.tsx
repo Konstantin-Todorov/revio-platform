@@ -3,6 +3,8 @@ import { Sidebar } from "@/components/shell/Sidebar";
 import { Topbar } from "@/components/shell/Topbar";
 import { ShellFrame } from "@/components/shell/ShellFrame";
 import { ShellProvider } from "@/components/shell/ShellContext";
+import { operatorChrome } from "@/lib/chrome";
+import { BottomBar, BOTTOM_BAR_SPACE, FocusNew } from "@revio/ui/app-chrome";
 import { getOperatorSession } from "@/lib/session";
 import { OPERATOR_TIME_ZONE, getNotificationFeed } from "@/lib/notifications";
 import { FieldGuard } from "@revio/ui/field-guard";
@@ -13,6 +15,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
   const session = await getOperatorSession();
   if (!session) redirect("/logout");
   const feed = await getNotificationFeed();
+  const chrome = await operatorChrome();
 
   return (
     <ShellProvider>
@@ -22,13 +25,14 @@ export default async function ProtectedLayout({ children }: { children: React.Re
         <div className="min-h-screen">
         <Sidebar />
         <ShellFrame>
-          <Topbar name={session.name} role={session.role} feed={feed} timeZone={OPERATOR_TIME_ZONE} />
+          <Topbar name={session.name} role={session.role} feed={feed} timeZone={OPERATOR_TIME_ZONE} chrome={{ create: chrome.create, strings: chrome.strings, roots: chrome.tabs.map((x) => x.href) }} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate
               documentElement.scrollHeight past the viewport — the window then scrolls into that empty
               region and drags the fixed-height shell up ("dead space / the page looks broken"). */}
-          <main className="relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6">
+          <main className={`relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6 ${BOTTOM_BAR_SPACE}`}>
+            <FocusNew />
             {/* Y1: instant, in-place feedback on a numeric field typed into wrongly. A number
                 input HIDES invalid text (its value reads as ""), so without this a bad field looks
                 merely empty — nothing objects, and the form saves a value nobody chose. */}
@@ -40,6 +44,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           </main>
         </ShellFrame>
       </div>
+      <BottomBar tabs={chrome.tabs} create={chrome.create} t={chrome.strings} />
     </ShellProvider>
   );
 }

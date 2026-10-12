@@ -23,6 +23,8 @@ import { LocaleProvider } from "@revio/ui/i18n-context";
 import { shell } from "@/lib/i18n/shell";
 import { getLocale } from "@/lib/locale";
 import { keepThisTrial } from "@/lib/actions-self-trial";
+import { pmsChrome } from "@/lib/chrome";
+import { BottomBar, BOTTOM_BAR_SPACE, FocusNew } from "@revio/ui/app-chrome";
 
 export default async function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
@@ -117,6 +119,13 @@ export default async function ProtectedLayout({ children }: { children: React.Re
       )
     : null;
 
+  const { tabs, create } = await pmsChrome(session.role, t.chrome);
+  const chromeStrings = {
+    more: t.chrome.more, create: t.chrome.create, createHeading: t.chrome.createHeading,
+    close: t.chrome.close, back: t.chrome.back, menu: t.chrome.bar,
+  };
+  const titles = Object.entries(t.nav).map(([href, label]) => ({ href, label }));
+
   return (
     <LocaleProvider locale={locale}>
     <ShellProvider>
@@ -124,15 +133,16 @@ export default async function ProtectedLayout({ children }: { children: React.Re
             still stays put — but wheel, keyboard, scrollbar and scroll restoration are all native
             browser behaviour instead of something we reimplement. */}
         <div className="min-h-screen">
-        <Sidebar role={session.role} footer={t.businessDate(businessDate)} t={{ sections: t.sections, nav: t.nav, menu: t.menu, product: t.product }} />
+        <Sidebar role={session.role} footer={t.businessDate(businessDate)} t={{ sections: t.sections, nav: t.nav, menu: t.menu, product: t.product, fav: { title: t.chrome.favourites, add: t.chrome.addFavourite, remove: t.chrome.removeFavourite } }} />
         <div className="flex min-h-screen min-w-0 flex-col lg:pl-[248px]">
-          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} locale={locale} t={{ menu: t.menu, roles: t.roles, search: t.search }} />
+          <Topbar products={products} upsells={upsells} properties={properties} activeId={session.activePropertyId} activeName={activeName} role={session.role} userName={session.userName} feed={feed} timeZone={property.timezone} locale={locale} t={{ menu: t.menu, roles: t.roles, search: t.search }} chrome={{ create, strings: chromeStrings, titles, roots: tabs.map((x) => x.href) }} />
           {/* `relative` on <main> is load-bearing: it makes <main> the containing block for its
               absolutely-positioned `sr-only` descendants (amenity chips, hero shading radios). Without
               it they escape to <html>, sit at their deep static-flow position, and inflate
               documentElement.scrollHeight past the viewport — the window then scrolls into that empty
               region and drags the fixed-height shell up ("dead space / the page looks broken"). */}
-          <main className="relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6">
+          <main className={`relative flex-1 bg-surface-page px-4 py-4 lg:px-6 lg:py-6 ${tabs.length ? BOTTOM_BAR_SPACE : ""}`}>
+            <FocusNew />
             {/* Keyed by the property in view — switching hotels re-renders the server components but
                 leaves CLIENT components mounted, holding the previous hotel's form values. A form
                 pre-filled from hotel A and submitted under hotel B writes A's values onto B. */}
@@ -158,6 +168,7 @@ export default async function ProtectedLayout({ children }: { children: React.Re
           </main>
         </div>
       </div>
+      <BottomBar tabs={tabs} create={create} t={chromeStrings} />
     </ShellProvider>
     </LocaleProvider>
   );

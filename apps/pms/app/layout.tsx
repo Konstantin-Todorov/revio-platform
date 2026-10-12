@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
+import "@revio/ui/mobile.css";
 // Bulgarian letters — a Cyrillic-only face. Generated; see scripts/fetch-fonts.mjs.
 import "./cyrillic-font.css";
 import { LOCALE_LABELS } from "@revio/ui/i18n";
@@ -31,6 +32,8 @@ const hanken = localFont({
 export const metadata: Metadata = {
   title: "RevioPMS — Operations",
   description: "Revio · property management system · front desk, housekeeping, folios",
+  // Added to a phone's home screen it opens full-screen, like an app — see app/manifest.ts.
+  appleWebApp: { capable: true, title: "RevioPMS", statusBarStyle: "default" },
 };
 
 
